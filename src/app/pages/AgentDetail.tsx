@@ -2,11 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Activity, CheckCircle2, AlertTriangle, Brain,
-  Database, Zap, Clock, TrendingUp, Shield, ChevronDown, ChevronRight
+  Database, Zap, Clock, TrendingUp, Shield, ChevronDown, ChevronRight,
+  MessageSquare, Users, BarChart2, Cpu, CalendarCheck, Flag,
+  UserCheck, GitMerge, Bell, FileText, Send, ChevronUp, MoreHorizontal
 } from 'lucide-react';
 
 /* ── Types ───────────────────────────────────────────── */
 type LogType = 'fetch' | 'evaluate' | 'reasoning' | 'success' | 'warning' | 'action' | 'decision' | 'error';
+type TaskPriority = 'High' | 'Medium' | 'Low';
+type TaskStatus = 'Open' | 'In Progress' | 'Resolved';
 
 interface LogEntry {
   id: string;
@@ -14,6 +18,24 @@ interface LogEntry {
   type: LogType;
   message: string;
   detail?: string;
+}
+
+interface AgentTask {
+  id: string;
+  title: string;
+  supplier: string;
+  priority: TaskPriority;
+  assignee: string;
+  status: TaskStatus;
+  dueDate: string;
+  description: string;
+}
+
+interface TimelineEntry {
+  id: string;
+  time: string;
+  event: string;
+  status: 'alert' | 'info' | 'success' | 'warning';
 }
 
 /* ── Log type styles ─────────────────────────────────── */
@@ -30,56 +52,121 @@ const LOG_STYLE: Record<LogType, { color: string; bg: string; label: string }> =
 
 /* ── Agent definitions ───────────────────────────────── */
 const AGENTS: Record<string, {
-  id: string; initials: string; color: string; name: string;
+  id: string; initials: string; color: string; name: string; role: string;
   status: 'Active' | 'Idle'; controls: string[]; suppliers: string[];
   uptime: string; alerts: number; alertLevel: string; systems: string[];
-  currentTask: string; nextEval: string;
+  currentTask: string; nextEval: string; lastScan: string;
+  openTasks: number; avatarSeed: string;
 }> = {
   a1: {
-    id: 'a1', initials: 'A1', color: '#0EA5E9', name: 'Agent A1',
+    id: 'a1', initials: 'A1', color: '#0EA5E9', name: 'Agent Aria', role: 'MFA & Access Control Specialist',
     status: 'Active', controls: ['MFA Enforcement', 'Privileged Access Mgmt', 'Vulnerability Scanning'],
     suppliers: ['XYZ Corporation', 'GHI Technologies'],
     uptime: '99.1%', alerts: 12, alertLevel: 'High',
     systems: ['Email', 'API', 'ServiceNow'],
     currentTask: 'Evaluating MFA coverage across 847 assets',
-    nextEval: 'In 45 min',
+    nextEval: 'In 45 min', lastScan: '09:14 AM', openTasks: 3, avatarSeed: 'Aria',
   },
   a2: {
-    id: 'a2', initials: 'A2', color: '#10B981', name: 'Agent A2',
+    id: 'a2', initials: 'A2', color: '#10B981', name: 'Agent Blake', role: 'Encryption & Data Classification Analyst',
     status: 'Active', controls: ['Encryption at Rest', 'Data Classification Policy'],
     suppliers: ['ABC Services Ltd', 'MNO Partners', 'STU Analytics'],
     uptime: '98.7%', alerts: 4, alertLevel: '',
     systems: ['Email', 'API', 'Slack'],
     currentTask: 'Auditing data classification labels across storage volumes',
-    nextEval: 'In 2 hrs',
+    nextEval: 'In 2 hrs', lastScan: '08:52 AM', openTasks: 1, avatarSeed: 'Blake',
   },
   a3: {
-    id: 'a3', initials: 'A3', color: '#8B5CF6', name: 'Agent A3',
+    id: 'a3', initials: 'A3', color: '#8B5CF6', name: 'Agent Casey', role: 'Network & Access Review Auditor',
     status: 'Active', controls: ['Access Review Policy', 'Network Segmentation', 'Patch Management', 'Incident Response Plan'],
     suppliers: ['DEF Limited'],
     uptime: '97.3%', alerts: 7, alertLevel: 'High',
     systems: ['API', 'ServiceNow'],
     currentTask: 'Running quarterly access review across Active Directory',
-    nextEval: 'In 1 hr',
+    nextEval: 'In 1 hr', lastScan: '08:30 AM', openTasks: 5, avatarSeed: 'Casey',
   },
   a4: {
-    id: 'a4', initials: 'A4', color: '#F59E0B', name: 'Agent A4',
+    id: 'a4', initials: 'A4', color: '#F59E0B', name: 'Agent Dana', role: 'Backup & Recovery Monitor',
     status: 'Idle', controls: ['Backup Verification'],
     suppliers: ['JKL Consultancy', 'PQR Systems'],
     uptime: '100%', alerts: 0, alertLevel: '',
     systems: ['Email'],
     currentTask: 'Idle — waiting for scheduled trigger at 02:00 UTC',
-    nextEval: 'Tomorrow 02:00',
+    nextEval: 'Tomorrow 02:00', lastScan: 'Yesterday 02:04 AM', openTasks: 0, avatarSeed: 'Dana',
   },
   a5: {
-    id: 'a5', initials: 'A5', color: '#EF4444', name: 'Agent A5',
+    id: 'a5', initials: 'A5', color: '#EF4444', name: 'Agent Ellis', role: 'Vulnerability & Patch Intelligence',
     status: 'Active', controls: ['Vulnerability Scanning', 'Patch Management'],
     suppliers: ['PQR Systems'],
     uptime: '99.8%', alerts: 2, alertLevel: '',
     systems: ['API', 'Splunk'],
     currentTask: 'Scanning for unpatched CVEs in production environment',
-    nextEval: 'In 20 min',
+    nextEval: 'In 20 min', lastScan: '09:22 AM', openTasks: 2, avatarSeed: 'Ellis',
   },
+};
+
+/* ── Tasks per agent ──────────────────────────────────── */
+const AGENT_TASKS: Record<string, AgentTask[]> = {
+  a1: [
+    { id: 't1', title: 'MFA Enrollment — 2 Pending Admin Accounts', supplier: 'XYZ Corporation', priority: 'High', assignee: 'priya@abc.co', status: 'Open', dueDate: '2026-03-07', description: 'Two admin accounts have not completed MFA enrollment. Breach risk in 4 days.' },
+    { id: 't2', title: 'Critical CVE Patch — CVE-2024-4711', supplier: 'GHI Technologies', priority: 'High', assignee: 'anita@abc.co', status: 'In Progress', dueDate: '2026-03-06', description: 'Critical vulnerability approaching 30-day SLA. Patch available upstream.' },
+    { id: 't3', title: 'Contract Renewal Reminder — XYZ Corp', supplier: 'XYZ Corporation', priority: 'Medium', assignee: '', status: 'Open', dueDate: '2026-03-15', description: 'Contract expires in 15 days. Procurement to initiate renewal.' },
+  ],
+  a2: [
+    { id: 't4', title: 'Encrypt vm-staging-09', supplier: 'ABC Services Ltd', priority: 'Medium', assignee: 'raj@abc.co', status: 'In Progress', dueDate: '2026-03-08', description: 'New Azure VM created without encryption. Auto-remediation triggered but requires verification.' },
+  ],
+  a3: [
+    { id: 't5', title: 'Revoke Access — 3 Orphaned Accounts', supplier: 'DEF Limited', priority: 'High', assignee: 'it-admin@abc.co', status: 'In Progress', dueDate: '2026-03-05', description: 'Accounts U1042, U1098, U1187 belong to terminated employees with active access.' },
+    { id: 't6', title: 'Patch 3 Servers — Feb 2026 Security Rollup', supplier: 'DEF Limited', priority: 'High', assignee: 'sysadmin@abc.co', status: 'Open', dueDate: '2026-03-10', description: '3 servers missing Feb 2026 security rollup. SLA breach in 8 days.' },
+    { id: 't7', title: 'Document Approved VLAN Exceptions', supplier: 'DEF Limited', priority: 'Low', assignee: '', status: 'Open', dueDate: '2026-03-20', description: '2 cross-VLAN firewall exceptions approved in ServiceNow. Audit documentation required.' },
+    { id: 't8', title: 'Access Review Sign-off by Dept Heads', supplier: 'DEF Limited', priority: 'Medium', assignee: 'hr@abc.co', status: 'Open', dueDate: '2026-03-12', description: 'Quarterly access review results require department head sign-off.' },
+    { id: 't9', title: 'Update Insider Threat Runbook', supplier: 'DEF Limited', priority: 'Low', assignee: '', status: 'Open', dueDate: '2026-03-25', description: 'IR Plan references outdated escalation contacts. Update required.' },
+  ],
+  a4: [],
+  a5: [
+    { id: 't10', title: 'Patch CVE-2024-7821 (CVSS 5.5)', supplier: 'PQR Systems', priority: 'Medium', assignee: 'sysadmin@abc.co', status: 'In Progress', dueDate: '2026-03-18', description: '18 days remaining in SLA. Patches available upstream. Deployment pending.' },
+    { id: 't11', title: 'Patch CVE-2024-6634 (CVSS 6.1)', supplier: 'PQR Systems', priority: 'Medium', assignee: 'sysadmin@abc.co', status: 'Open', dueDate: '2026-03-18', description: '18 days remaining in SLA. Patches available upstream.' },
+  ],
+};
+
+/* ── Timeline per agent ───────────────────────────────── */
+const AGENT_TIMELINE: Record<string, TimelineEntry[]> = {
+  a1: [
+    { id: 'tl1', time: '09:14 AM', event: 'MFA audit completed — 94.5% coverage across 847 assets', status: 'success' },
+    { id: 'tl2', time: '09:08 AM', event: 'ServiceNow ticket VULN-2847 auto-created for critical CVE patch', status: 'alert' },
+    { id: 'tl3', time: '09:05 AM', event: 'Email dispatched to Risk Manager & Compliance Officer re: CVE breach risk', status: 'warning' },
+    { id: 'tl4', time: '08:55 AM', event: 'JIT access session audit completed — 14 sessions, 0 standing access', status: 'success' },
+    { id: 'tl5', time: '08:40 AM', event: 'Supplier XYZ Corporation contract expiry flagged — 15 days remaining', status: 'warning' },
+    { id: 'tl6', time: '08:20 AM', event: 'MFA enrollment advisory sent to 3 non-compliant admin accounts', status: 'info' },
+  ],
+  a2: [
+    { id: 'tl1', time: '08:52 AM', event: 'Auto-remediation applied: vm-staging-09 encryption policy enforced', status: 'success' },
+    { id: 'tl2', time: '08:48 AM', event: 'Unencrypted Azure VM detected: vm-staging-09', status: 'alert' },
+    { id: 'tl3', time: '08:35 AM', event: 'Data classification audit: 91% M365 assets labelled (156 total)', status: 'success' },
+    { id: 'tl4', time: '08:20 AM', event: 'Encryption at Rest below threshold — 67% coverage (need 70%)', status: 'warning' },
+    { id: 'tl5', time: '08:10 AM', event: 'Ticket ENC-1104 raised — 106 assets require encryption upgrade', status: 'info' },
+    { id: 'tl6', time: '07:55 AM', event: 'STU Analytics supplier note flagged for DPO — PII config pending', status: 'info' },
+  ],
+  a3: [
+    { id: 'tl1', time: '08:30 AM', event: 'Orphaned account revocation initiated — U1042, U1098, U1187', status: 'alert' },
+    { id: 'tl2', time: '08:25 AM', event: 'PATCH-3319 escalated to P1 — 3 servers missing Feb 2026 rollup', status: 'warning' },
+    { id: 'tl3', time: '08:10 AM', event: 'Network segmentation confirmed — VLAN 10/20 isolation verified', status: 'success' },
+    { id: 'tl4', time: '07:50 AM', event: 'IR runbooks validated — all current, last updated Feb 2026', status: 'success' },
+    { id: 'tl5', time: '07:30 AM', event: 'Quarterly access review initiated — 1,240 AD accounts scanned', status: 'info' },
+  ],
+  a4: [
+    { id: 'tl1', time: '02:04 AM', event: 'Backup verification complete — 14/14 snapshots validated', status: 'success' },
+    { id: 'tl2', time: '02:02 AM', event: 'Restore test confirmed — 4.2 hrs (within 6 hr SLA)', status: 'success' },
+    { id: 'tl3', time: '02:00 AM', event: 'Agent triggered by scheduled backup verification job', status: 'info' },
+    { id: 'tl4', time: 'Yesterday', event: 'Agent entered idle state — no active triggers detected', status: 'info' },
+  ],
+  a5: [
+    { id: 'tl1', time: '09:22 AM', event: 'No new CVEs detected in latest Splunk scan (650 endpoints)', status: 'success' },
+    { id: 'tl2', time: '09:18 AM', event: 'Ticket VULN-2851 updated — CVE-2024-7821 & CVE-2024-6634 still unpatched (Day 12/30)', status: 'warning' },
+    { id: 'tl3', time: '08:58 AM', event: 'Patch compliance: 92% (650 systems), 52 systems 1-2 minor versions behind', status: 'success' },
+    { id: 'tl4', time: '08:40 AM', event: 'Two medium CVEs detected — SLA: 18 days remaining', status: 'warning' },
+    { id: 'tl5', time: '08:30 AM', event: 'ServiceNow ticket VULN-2851 (P2) auto-created', status: 'info' },
+  ],
 };
 
 /* ── Log sequences per agent ─────────────────────────── */
@@ -89,10 +176,9 @@ function buildInitialLogs(agentId: string): LogEntry[] {
     const d = new Date(now.getTime() - offsetSeconds * 1000);
     return d.toTimeString().slice(0, 8);
   };
-
   const seqs: Record<string, LogEntry[]> = {
     a1: [
-      { id: '1', time: ts(420), type: 'fetch',     message: 'Connecting to API Integration endpoint', },
+      { id: '1', time: ts(420), type: 'fetch',     message: 'Connecting to API Integration endpoint' },
       { id: '2', time: ts(418), type: 'fetch',     message: 'Pulling MFA status from Active Directory (89 assets)' },
       { id: '3', time: ts(415), type: 'evaluate',  message: 'Running evaluation: MFA Enforcement' },
       { id: '4', time: ts(410), type: 'reasoning', message: 'Analyzing authentication logs across 847 assets', detail: 'Found 3 admin accounts with MFA disabled. Coverage calculated at 94.2%. Threshold is 90% — currently passing. Flagging 3 accounts for remediation advisory.' },
@@ -104,9 +190,9 @@ function buildInitialLogs(agentId: string): LogEntry[] {
       { id: '10', time: ts(355), type: 'warning',  message: 'Vulnerability Scanning: HIGH RISK — 2 critical CVEs near SLA breach' },
       { id: '11', time: ts(352), type: 'action',   message: 'ServiceNow ticket created: VULN-2847 (P1)' },
       { id: '12', time: ts(350), type: 'action',   message: 'Email alert dispatched → Risk Manager, Compliance Officer' },
-      { id: '13', time: ts(340), type: 'evaluate',  message: 'Running evaluation: Privileged Access Mgmt' },
+      { id: '13', time: ts(340), type: 'evaluate', message: 'Running evaluation: Privileged Access Mgmt' },
       { id: '14', time: ts(330), type: 'reasoning', message: 'Checking JIT access logs for admin operations', detail: 'All 14 admin sessions in last 24h used JIT. No standing access detected. Privileged accounts: 14 active, 0 orphaned.' },
-      { id: '15', time: ts(320), type: 'success',   message: 'Privileged Access Mgmt: PASSED — 100% JIT compliance' },
+      { id: '15', time: ts(320), type: 'success',  message: 'Privileged Access Mgmt: PASSED — 100% JIT compliance' },
     ],
     a2: [
       { id: '1', time: ts(300), type: 'fetch',     message: 'Fetching storage inventory from Azure Blob & S3' },
@@ -118,7 +204,7 @@ function buildInitialLogs(agentId: string): LogEntry[] {
       { id: '7', time: ts(250), type: 'evaluate',  message: 'Running evaluation: Data Classification Policy' },
       { id: '8', time: ts(240), type: 'reasoning', message: 'Auditing 156 M365 assets for classification labels', detail: 'Checked 156 M365 assets. 142 classified (91%). 14 unclassified — 9 are email archives, 5 are SharePoint docs created in last 7 days (within grace period).' },
       { id: '9', time: ts(232), type: 'success',   message: 'Data Classification Policy: PASSED — 91% labelled' },
-      { id: '10', time: ts(220), type: 'fetch',     message: 'Checking supplier STU Analytics assessment status' },
+      { id: '10', time: ts(220), type: 'fetch',    message: 'Checking supplier STU Analytics assessment status' },
       { id: '11', time: ts(215), type: 'reasoning', message: 'Reviewing supplier risk posture for STU Analytics', detail: 'Score: 22 (Low). Assessment complete. PII sharing not configured. Contract ends Jul 2028. No immediate risk.' },
       { id: '12', time: ts(210), type: 'action',   message: 'Supplier note: STU Analytics PII config pending — flagged for DPO' },
     ],
@@ -132,9 +218,9 @@ function buildInitialLogs(agentId: string): LogEntry[] {
       { id: '7', time: ts(440), type: 'evaluate',  message: 'Running evaluation: Network Segmentation' },
       { id: '8', time: ts(425), type: 'reasoning', message: 'Scanning VLAN topology — prod vs. staging isolation', detail: 'VLAN rules reviewed. Production (VLAN 10) and Staging (VLAN 20) properly isolated. 2 cross-VLAN firewall rules exist — both are approved exceptions in ServiceNow.' },
       { id: '9', time: ts(415), type: 'success',   message: 'Network Segmentation: PASSED — isolation confirmed, 2 approved exceptions on record' },
-      { id: '10', time: ts(400), type: 'evaluate',  message: 'Running evaluation: Incident Response Plan' },
+      { id: '10', time: ts(400), type: 'evaluate', message: 'Running evaluation: Incident Response Plan' },
       { id: '11', time: ts(385), type: 'reasoning', message: 'Checking IR runbooks last update date and tabletop exercise records', detail: 'IR Plan last updated: Feb 2026. Tabletop exercise: Jan 2026. Both within SLA. Runbooks cover: ransomware, data breach, insider threat. No open P1 incidents.' },
-      { id: '12', time: ts(375), type: 'success',   message: 'Incident Response Plan: PASSED — all runbooks current' },
+      { id: '12', time: ts(375), type: 'success',  message: 'Incident Response Plan: PASSED — all runbooks current' },
     ],
     a4: [
       { id: '1', time: ts(3600), type: 'fetch',    message: 'Scheduled backup verification triggered at 02:00 UTC' },
@@ -156,11 +242,9 @@ function buildInitialLogs(agentId: string): LogEntry[] {
       { id: '8', time: ts(115), type: 'success',   message: 'Patch Management: PASSED — 92% compliance (threshold: 85%)' },
     ],
   };
-
   return seqs[agentId] || seqs['a1'];
 }
 
-/* ── Streaming log queue per agent ───────────────────── */
 const STREAM_QUEUES: Record<string, Array<Omit<LogEntry, 'id' | 'time'>>> = {
   a1: [
     { type: 'fetch',     message: 'Re-fetching API Integration for updated MFA status' },
@@ -204,7 +288,34 @@ const STREAM_QUEUES: Record<string, Array<Omit<LogEntry, 'id' | 'time'>>> = {
   ],
 };
 
-/* ── Reasoning Entry (expandable) ────────────────────── */
+/* ── Helper: Priority badge ───────────────────────────── */
+function PriorityBadge({ priority }: { priority: TaskPriority }) {
+  const cfg = {
+    High:   { color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
+    Medium: { color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
+    Low:    { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
+  }[priority];
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, backgroundColor: cfg.bg, border: `1px solid ${cfg.border}`, padding: '2px 8px', borderRadius: 20 }}>
+      {priority}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: TaskStatus }) {
+  const cfg = {
+    'Open':        { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' },
+    'In Progress': { color: '#0EA5E9', bg: '#EFF6FF', border: '#BAE6FD' },
+    'Resolved':    { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
+  }[status];
+  return (
+    <span style={{ fontSize: 10, fontWeight: 600, color: cfg.color, backgroundColor: cfg.bg, border: `1px solid ${cfg.border}`, padding: '2px 8px', borderRadius: 20 }}>
+      {status}
+    </span>
+  );
+}
+
+/* ── Reasoning Entry ─────────────────────────────────── */
 function ReasoningEntry({ entry }: { entry: LogEntry }) {
   const [expanded, setExpanded] = useState(false);
   const style = LOG_STYLE[entry.type];
@@ -214,11 +325,7 @@ function ReasoningEntry({ entry }: { entry: LogEntry }) {
         <Brain size={13} color={style.color} />
         <span style={{ fontSize: 11, fontWeight: 700, color: style.color, letterSpacing: '0.06em' }}>{style.label}</span>
         <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 'auto' }}>{entry.time}</span>
-        {entry.detail && (
-          <span style={{ color: style.color }}>
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </span>
-        )}
+        {entry.detail && <span style={{ color: style.color }}>{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>}
       </div>
       <div style={{ fontSize: 13, color: '#334155', marginTop: 4, fontWeight: 500 }}>{entry.message}</div>
       {expanded && entry.detail && (
@@ -230,17 +337,122 @@ function ReasoningEntry({ entry }: { entry: LogEntry }) {
   );
 }
 
-/* ── Log Entry ───────────────────────────────────────── */
 function LogRow({ entry }: { entry: LogEntry }) {
   if (entry.type === 'reasoning') return <ReasoningEntry entry={entry} />;
   const style = LOG_STYLE[entry.type];
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', borderBottom: '1px solid #F8FAFC' }}>
       <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace', flexShrink: 0, marginTop: 2, minWidth: 56 }}>{entry.time}</span>
-      <span style={{ fontSize: 10, fontWeight: 700, color: style.color, backgroundColor: style.bg, padding: '1px 6px', borderRadius: 4, flexShrink: 0, marginTop: 1, minWidth: 46, textAlign: 'center' }}>
-        {style.label}
-      </span>
+      <span style={{ fontSize: 10, fontWeight: 700, color: style.color, backgroundColor: style.bg, padding: '1px 6px', borderRadius: 4, flexShrink: 0, marginTop: 1, minWidth: 46, textAlign: 'center' }}>{style.label}</span>
       <span style={{ fontSize: 13, color: '#334155', flex: 1 }}>{entry.message}</span>
+    </div>
+  );
+}
+
+/* ── Task Row ─────────────────────────────────────────── */
+function TaskRow({ task, agentColor }: { task: AgentTask; agentColor: string }) {
+  const [showComment, setShowComment] = useState(false);
+  const [comment, setComment] = useState('');
+  const [localStatus, setLocalStatus] = useState<TaskStatus>(task.status);
+
+  return (
+    <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '14px 16px', backgroundColor: '#fff', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{task.title}</span>
+            <PriorityBadge priority={task.priority} />
+            <StatusBadge status={localStatus} />
+          </div>
+          <div style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>{task.description}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: '#8B5CF6', backgroundColor: '#F5F3FF', padding: '2px 8px', borderRadius: 10, fontWeight: 500 }}>
+              {task.supplier}
+            </span>
+            {task.assignee ? (
+              <span style={{ fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <UserCheck size={11} />{task.assignee}
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>Unassigned</span>
+            )}
+            <span style={{ fontSize: 11, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <CalendarCheck size={11} />Due {task.dueDate}
+            </span>
+          </div>
+        </div>
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+          {localStatus !== 'In Progress' && localStatus !== 'Resolved' && (
+            <button
+              onClick={() => setLocalStatus('In Progress')}
+              style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px solid #BAE6FD', backgroundColor: '#EFF6FF', color: '#0EA5E9', cursor: 'pointer' }}
+            >
+              Assign
+            </button>
+          )}
+          {localStatus !== 'Resolved' && (
+            <button
+              onClick={() => setLocalStatus('Resolved')}
+              style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px solid #A7F3D0', backgroundColor: '#ECFDF5', color: '#10B981', cursor: 'pointer' }}
+            >
+              Resolve
+            </button>
+          )}
+          <button
+            style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#EF4444', cursor: 'pointer' }}
+          >
+            Escalate
+          </button>
+          <button
+            onClick={() => setShowComment(v => !v)}
+            style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <MessageSquare size={11} /> Comment
+          </button>
+        </div>
+      </div>
+      {showComment && (
+        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <input
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            placeholder="Add a comment or note..."
+            style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 7, padding: '7px 12px', fontSize: 12, outline: 'none', color: '#334155' }}
+          />
+          <button
+            onClick={() => { setComment(''); setShowComment(false); }}
+            style={{ padding: '7px 14px', borderRadius: 7, border: 'none', backgroundColor: agentColor, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+          >
+            <Send size={11} /> Send
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Timeline Item ────────────────────────────────────── */
+function TimelineItem({ entry, isLast }: { entry: TimelineEntry; isLast: boolean }) {
+  const cfg = {
+    alert:   { color: '#EF4444', bg: '#FEF2F2', border: '#FECACA', dot: '#EF4444' },
+    warning: { color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A', dot: '#F59E0B' },
+    success: { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0', dot: '#10B981' },
+    info:    { color: '#0EA5E9', bg: '#EFF6FF', border: '#BAE6FD', dot: '#0EA5E9' },
+  }[entry.status];
+
+  return (
+    <div style={{ display: 'flex', gap: 12, marginBottom: isLast ? 0 : 16, position: 'relative' }}>
+      {/* Timeline line */}
+      {!isLast && (
+        <div style={{ position: 'absolute', left: 7, top: 20, bottom: -16, width: 1, backgroundColor: '#E2E8F0', zIndex: 0 }} />
+      )}
+      {/* Dot */}
+      <div style={{ width: 15, height: 15, borderRadius: '50%', backgroundColor: cfg.dot, flexShrink: 0, marginTop: 2, zIndex: 1, border: '2px solid #fff', boxShadow: `0 0 0 2px ${cfg.dot}33` }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace', marginBottom: 2 }}>{entry.time}</div>
+        <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.4 }}>{entry.event}</div>
+      </div>
     </div>
   );
 }
@@ -255,70 +467,81 @@ export function AgentDetail() {
   const [logs, setLogs] = useState<LogEntry[]>(() => buildInitialLogs(agent.id));
   const [streamIdx, setStreamIdx] = useState(0);
   const [pulse, setPulse] = useState(true);
+  const [taskFilter, setTaskFilter] = useState<TaskStatus | 'All'>('All');
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
-  // Auto-scroll feed to bottom on new entries
+  const tasks = AGENT_TASKS[agent.id] || [];
+  const timeline = AGENT_TIMELINE[agent.id] || [];
+
+  const filteredTasks = taskFilter === 'All' ? tasks : tasks.filter(t => t.status === taskFilter);
+  const openCount = tasks.filter(t => t.status === 'Open').length;
+  const inProgressCount = tasks.filter(t => t.status === 'In Progress').length;
+
   useEffect(() => {
-    if (feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
+    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [logs]);
 
-  // Stream new entries for active agents
   useEffect(() => {
     if (agent.status !== 'Active') return;
     const queue = STREAM_QUEUES[agent.id] || [];
-    if (queue.length === 0) return;
-
+    if (!queue.length) return;
     const interval = setInterval(() => {
       setStreamIdx(prev => {
         const idx = prev % queue.length;
         const entry = queue[idx];
         const now = new Date();
-        const timeStr = now.toTimeString().slice(0, 8);
-        setLogs(l => [...l, { ...entry, id: `live_${Date.now()}_${idx}`, time: timeStr }]);
+        setLogs(l => [...l, { ...entry, id: `live_${Date.now()}_${idx}`, time: now.toTimeString().slice(0, 8) }]);
         return prev + 1;
       });
     }, 3000);
-
     return () => clearInterval(interval);
   }, [agent.id, agent.status]);
 
-  // Pulse indicator toggle
   useEffect(() => {
     if (agent.status !== 'Active') return;
     const t = setInterval(() => setPulse(p => !p), 800);
     return () => clearInterval(t);
   }, [agent.status]);
 
-  const statCard = (label: string, value: string, color?: string) => (
-    <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 16px' }}>
-      <div style={{ fontSize: 11, fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: color || '#0F172A' }}>{value}</div>
-    </div>
-  );
+  const avatarUrl = `https://api.dicebear.com/7.x/personas/svg?seed=${agent.avatarSeed}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
 
   return (
-    <div style={{ maxWidth: 1200 }}>
+    <div style={{ maxWidth: 1200, fontFamily: "'Segoe UI', -apple-system, sans-serif" }}>
       {/* Back */}
       <button
         onClick={() => navigate('/agents')}
         style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, marginBottom: 16, padding: 0 }}
-        className="hover:text-[#0EA5E9]"
       >
         <ArrowLeft size={16} /> Back to Agents
       </button>
 
-      {/* Agent Header */}
-      <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '20px 24px', marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      {/* ── 1. AGENT PROFILE HEADER ──────────────────── */}
+      <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '24px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
           {/* Avatar */}
-          <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 20, fontWeight: 800, flexShrink: 0 }}>
-            {agent.initials}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <img
+              src={avatarUrl}
+              alt={agent.name}
+              width={72}
+              height={72}
+              style={{ borderRadius: '50%', border: `3px solid ${agent.color}40`, backgroundColor: '#F1F5F9', display: 'block' }}
+            />
+            {/* Status dot */}
+            <div style={{
+              position: 'absolute', bottom: 2, right: 2,
+              width: 14, height: 14, borderRadius: '50%',
+              backgroundColor: agent.status === 'Active' ? '#10B981' : '#94A3B8',
+              border: '2px solid #fff',
+              opacity: agent.status === 'Active' ? (pulse ? 1 : 0.4) : 1,
+              transition: 'opacity 0.3s',
+            }} />
           </div>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+
+          {/* Name + role */}
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 2 }}>
               <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', margin: 0 }}>{agent.name}</h1>
-              {/* Live indicator */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, backgroundColor: agent.status === 'Active' ? '#ECFDF5' : '#F1F5F9', padding: '4px 10px', borderRadius: 20, border: `1px solid ${agent.status === 'Active' ? '#A7F3D0' : '#E2E8F0'}` }}>
                 <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: agent.status === 'Active' ? '#10B981' : '#94A3B8', opacity: agent.status === 'Active' ? (pulse ? 1 : 0.3) : 1, transition: 'opacity 0.3s' }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: agent.status === 'Active' ? '#10B981' : '#94A3B8' }}>
@@ -326,42 +549,65 @@ export function AgentDetail() {
                 </span>
               </div>
             </div>
-            <div style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>
-              Monitoring {agent.controls.length} control{agent.controls.length !== 1 ? 's' : ''} · {agent.suppliers.length} supplier{agent.suppliers.length !== 1 ? 's' : ''} · Alert sensitivity: {agent.alertLevel || 'Low'}
+            <div style={{ fontSize: 13, color: '#64748B', marginBottom: 4 }}>{agent.role}</div>
+            <div style={{ fontSize: 12, color: '#94A3B8' }}>
+              {agent.controls.length} controls · {agent.suppliers.length} suppliers · Alert sensitivity: {agent.alertLevel || 'Low'}
             </div>
           </div>
+
           {/* Stats */}
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ textAlign: 'center', padding: '8px 16px', backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#0EA5E9' }}>{agent.uptime}</div>
-              <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 500 }}>UPTIME</div>
-            </div>
-            <div style={{ textAlign: 'center', padding: '8px 16px', backgroundColor: agent.alerts > 0 ? '#FFFBEB' : '#F8FAFC', borderRadius: 10, border: `1px solid ${agent.alerts > 0 ? '#FDE68A' : '#E2E8F0'}` }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: agent.alerts > 0 ? '#F59E0B' : '#94A3B8' }}>{agent.alerts}</div>
-              <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 500 }}>ALERTS</div>
-            </div>
-            <div style={{ textAlign: 'center', padding: '8px 16px', backgroundColor: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#6366F1' }}>{agent.nextEval}</div>
-              <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 500 }}>NEXT EVAL</div>
-            </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[
+              { label: 'UPTIME', value: agent.uptime, color: '#0EA5E9', bg: '#F8FAFC', border: '#E2E8F0' },
+              { label: 'ALERTS', value: String(agent.alerts), color: agent.alerts > 0 ? '#F59E0B' : '#94A3B8', bg: agent.alerts > 0 ? '#FFFBEB' : '#F8FAFC', border: agent.alerts > 0 ? '#FDE68A' : '#E2E8F0' },
+              { label: 'NEXT EVAL', value: agent.nextEval, color: '#6366F1', bg: '#F8FAFC', border: '#E2E8F0' },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'center', padding: '8px 14px', backgroundColor: s.bg, borderRadius: 10, border: `1px solid ${s.border}` }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>{s.label}</div>
+              </div>
+            ))}
           </div>
+        </div>
+
+        {/* Current Task bar */}
+        <div style={{ marginTop: 16, backgroundColor: `${agent.color}0A`, border: `1px solid ${agent.color}30`, borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Activity size={13} color={agent.color} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: agent.color, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>Currently</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{agent.currentTask}</span>
         </div>
       </div>
 
-      {/* Main Two-Column Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20, alignItems: 'start' }}>
+      {/* ── 2. AGENT OVERVIEW CARD ───────────────────── */}
+      <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <BarChart2 size={14} color="#6366F1" />
+          <span style={{ textTransform: 'uppercase', letterSpacing: '0.07em', fontSize: 11, color: '#64748B' }}>Agent Overview</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          {[
+            { label: 'Suppliers Monitored', value: agent.suppliers.length, icon: <Users size={16} color="#8B5CF6" />, color: '#8B5CF6', bg: '#F5F3FF' },
+            { label: 'Controls Active',     value: agent.controls.length,  icon: <Shield size={16} color="#0EA5E9" />, color: '#0EA5E9', bg: '#EFF6FF' },
+            { label: 'Open Alerts',         value: agent.alerts,           icon: <Bell size={16} color={agent.alerts > 0 ? '#F59E0B' : '#94A3B8'} />, color: agent.alerts > 0 ? '#F59E0B' : '#94A3B8', bg: agent.alerts > 0 ? '#FFFBEB' : '#F8FAFC' },
+            { label: 'Open Tasks',          value: openCount + inProgressCount, icon: <FileText size={16} color={openCount > 0 ? '#EF4444' : '#10B981'} />, color: openCount > 0 ? '#EF4444' : '#10B981', bg: openCount > 0 ? '#FEF2F2' : '#ECFDF5' },
+            { label: 'Last Scan',           value: agent.lastScan,         icon: <Clock size={16} color="#6366F1" />, color: '#6366F1', bg: '#EEF2FF' },
+          ].map(m => (
+            <div key={m.label} style={{ backgroundColor: m.bg, borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {m.icon}
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: m.color }}>{m.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── MAIN LAYOUT: Left + Right ─────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
 
         {/* ── LEFT COLUMN ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Current Task */}
-          <div style={{ backgroundColor: '#fff', border: `2px solid ${agent.color}40`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <Activity size={14} color={agent.color} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: agent.color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current Task</span>
-            </div>
-            <p style={{ fontSize: 13, color: '#334155', margin: 0, lineHeight: 1.5 }}>{agent.currentTask}</p>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Assigned Controls */}
           <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -372,14 +618,13 @@ export function AgentDetail() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {agent.controls.map(c => (
                 <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155', padding: '6px 10px', backgroundColor: '#F8FAFC', borderRadius: 7 }}>
-                  <CheckCircle2 size={12} color="#10B981" />
-                  {c}
+                  <CheckCircle2 size={12} color="#10B981" />{c}
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Assigned Suppliers */}
+          {/* Monitoring Suppliers */}
           <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
               <TrendingUp size={14} color="#8B5CF6" />
@@ -388,17 +633,14 @@ export function AgentDetail() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {agent.suppliers.map(s => (
                 <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155', padding: '6px 10px', backgroundColor: '#F5F3FF', borderRadius: 7 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#8B5CF6', flexShrink: 0 }} />
-                  {s}
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#8B5CF6', flexShrink: 0 }} />{s}
                 </div>
               ))}
-              {agent.suppliers.length === 0 && (
-                <span style={{ fontSize: 12, color: '#94A3B8' }}>No suppliers assigned</span>
-              )}
+              {agent.suppliers.length === 0 && <span style={{ fontSize: 12, color: '#94A3B8' }}>No suppliers assigned</span>}
             </div>
           </div>
 
-          {/* Systems */}
+          {/* Connected Systems */}
           <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
               <Database size={14} color="#F59E0B" />
@@ -410,62 +652,120 @@ export function AgentDetail() {
               ))}
             </div>
           </div>
-        </div>
 
-        {/* ── RIGHT COLUMN: Live Feed ── */}
-        <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', height: 640 }}>
-          {/* Feed Header */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Zap size={16} color="#F59E0B" />
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>Activity Feed</span>
-              {agent.status === 'Active' && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: 20, border: '1px solid #A7F3D0' }}>
-                  STREAMING LIVE
-                </span>
-              )}
+          {/* ── 4. AGENT ACTIVITY TIMELINE ──────────── */}
+          <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: timelineCollapsed ? 0 : 14, cursor: 'pointer' }}
+              onClick={() => setTimelineCollapsed(v => !v)}
+            >
+              <GitMerge size={14} color="#6366F1" />
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.08em', flex: 1 }}>Activity Timeline</span>
+              {timelineCollapsed ? <ChevronDown size={13} color="#94A3B8" /> : <ChevronUp size={13} color="#94A3B8" />}
             </div>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>{logs.length} entries</span>
-          </div>
-
-          {/* Legend */}
-          <div style={{ padding: '8px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 10, flexWrap: 'wrap', flexShrink: 0, backgroundColor: '#FAFAFA' }}>
-            {Object.entries(LOG_STYLE).map(([type, s]) => (
-              <span key={type} style={{ fontSize: 10, fontWeight: 700, color: s.color, backgroundColor: s.bg, padding: '1px 7px', borderRadius: 4 }}>{s.label}</span>
-            ))}
-            <span style={{ fontSize: 10, color: '#94A3B8', marginLeft: 4 }}>· Click REASON entries to expand</span>
-          </div>
-
-          {/* Scrollable Feed */}
-          <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
-            {logs.map(entry => (
-              <LogRow key={entry.id} entry={entry} />
-            ))}
-            {/* Live cursor */}
-            {agent.status === 'Active' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', color: '#94A3B8' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10B981', opacity: pulse ? 1 : 0, transition: 'opacity 0.3s' }} />
-                <span style={{ fontSize: 12, fontFamily: 'monospace' }}>Agent running...</span>
+            {!timelineCollapsed && (
+              <div>
+                {timeline.map((entry, idx) => (
+                  <TimelineItem key={entry.id} entry={entry} isLast={idx === timeline.length - 1} />
+                ))}
+                {timeline.length === 0 && <span style={{ fontSize: 12, color: '#94A3B8' }}>No timeline entries</span>}
               </div>
             )}
           </div>
+        </div>
 
-          {/* Next Steps footer */}
-          <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', flexShrink: 0, borderRadius: '0 0 14px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Clock size={13} color="#6366F1" />
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6366F1', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Planned Next Steps</span>
+        {/* ── RIGHT COLUMN ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* ── 3. AGENT TASKS PANEL ─────────────────── */}
+          <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Flag size={15} color="#EF4444" />
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>Agent Tasks</span>
+                {tasks.length > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', backgroundColor: '#EF4444', padding: '1px 8px', borderRadius: 20 }}>{tasks.length}</span>
+                )}
+              </div>
+              {/* Filter pills */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['All', 'Open', 'In Progress', 'Resolved'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setTaskFilter(f as TaskStatus | 'All')}
+                    style={{
+                      fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                      backgroundColor: taskFilter === f ? agent.color : '#F8FAFC',
+                      color: taskFilter === f ? '#fff' : '#64748B',
+                      border: `1px solid ${taskFilter === f ? agent.color : '#E2E8F0'}`,
+                    }}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {agent.status === 'Active' ? (
-                <>
-                  <span style={{ fontSize: 12, color: '#334155', backgroundColor: '#EEF2FF', padding: '3px 10px', borderRadius: 20, border: '1px solid #C7D2FE' }}>Re-evaluate controls ({agent.nextEval})</span>
-                  <span style={{ fontSize: 12, color: '#334155', backgroundColor: '#EEF2FF', padding: '3px 10px', borderRadius: 20, border: '1px solid #C7D2FE' }}>Check supplier assessments</span>
-                  <span style={{ fontSize: 12, color: '#334155', backgroundColor: '#EEF2FF', padding: '3px 10px', borderRadius: 20, border: '1px solid #C7D2FE' }}>Update audit log entries</span>
-                </>
+            <div style={{ padding: '16px 20px' }}>
+              {filteredTasks.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#94A3B8', fontSize: 13 }}>
+                  <CheckCircle2 size={32} color="#A7F3D0" style={{ display: 'block', margin: '0 auto 8px' }} />
+                  No {taskFilter !== 'All' ? taskFilter.toLowerCase() + ' ' : ''}tasks for this agent
+                </div>
               ) : (
-                <span style={{ fontSize: 12, color: '#94A3B8' }}>Agent idle — triggers checked at {agent.nextEval}</span>
+                filteredTasks.map(task => <TaskRow key={task.id} task={task} agentColor={agent.color} />)
               )}
+            </div>
+          </div>
+
+          {/* ── LIVE ACTIVITY FEED ──────────────────── */}
+          <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', height: 520 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Zap size={16} color="#F59E0B" />
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>Activity Feed</span>
+                {agent.status === 'Active' && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: 20, border: '1px solid #A7F3D0' }}>STREAMING LIVE</span>
+                )}
+              </div>
+              <span style={{ fontSize: 12, color: '#94A3B8' }}>{logs.length} entries</span>
+            </div>
+
+            {/* Legend */}
+            <div style={{ padding: '8px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0, backgroundColor: '#FAFAFA' }}>
+              {Object.entries(LOG_STYLE).map(([type, s]) => (
+                <span key={type} style={{ fontSize: 10, fontWeight: 700, color: s.color, backgroundColor: s.bg, padding: '1px 7px', borderRadius: 4 }}>{s.label}</span>
+              ))}
+              <span style={{ fontSize: 10, color: '#94A3B8', marginLeft: 4 }}>· Click REASON to expand</span>
+            </div>
+
+            {/* Feed */}
+            <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+              {logs.map(entry => <LogRow key={entry.id} entry={entry} />)}
+              {agent.status === 'Active' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', color: '#94A3B8' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10B981', opacity: pulse ? 1 : 0, transition: 'opacity 0.3s' }} />
+                  <span style={{ fontSize: 12, fontFamily: 'monospace' }}>Agent running...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Next Steps footer */}
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', flexShrink: 0, borderRadius: '0 0 14px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Clock size={13} color="#6366F1" />
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6366F1', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Planned Next Steps</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {agent.status === 'Active' ? (
+                  <>
+                    <span style={{ fontSize: 12, color: '#334155', backgroundColor: '#EEF2FF', padding: '3px 10px', borderRadius: 20, border: '1px solid #C7D2FE' }}>Re-evaluate controls ({agent.nextEval})</span>
+                    <span style={{ fontSize: 12, color: '#334155', backgroundColor: '#EEF2FF', padding: '3px 10px', borderRadius: 20, border: '1px solid #C7D2FE' }}>Check supplier assessments</span>
+                    <span style={{ fontSize: 12, color: '#334155', backgroundColor: '#EEF2FF', padding: '3px 10px', borderRadius: 20, border: '1px solid #C7D2FE' }}>Update audit log entries</span>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12, color: '#94A3B8' }}>Agent idle — triggers checked at {agent.nextEval}</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
