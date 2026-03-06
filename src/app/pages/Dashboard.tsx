@@ -171,6 +171,7 @@ function KpiWidget({
   barBg,
   liveIndicator,
   liveLabel,
+  children,
 }: {
   icon         : React.ReactNode;
   iconBg       : string;
@@ -187,6 +188,7 @@ function KpiWidget({
   barBg       ?: string;
   liveIndicator?: boolean;
   liveLabel   ?: string;
+  children    ?: React.ReactNode;
 }) {
   return (
     <WidgetCard>
@@ -238,6 +240,9 @@ function KpiWidget({
       {barPct !== undefined && barColor && barBg && (
         <MiniBar pct={barPct} color={barColor} bg={barBg} />
       )}
+
+      {/* Extra content (e.g. SegmentBar) */}
+      {children}
     </WidgetCard>
   );
 }
@@ -526,9 +531,3 @@ export function Dashboard() {
   );
 }
 
-/* ══════════════════════════════════════════════════════
-   NOTE: KpiWidget accepts children for extra content
-   (e.g., SegmentBar). Pass as JSX children prop.
-   Current implementation ignores children prop since
-   all KPI content is handled via named props.
-   ══════════════════════════════════════════════════════ */
