@@ -1,36 +1,52 @@
 # Dependencies
 node_modules/
+.pnpm-store/
 
-# Build output
+# Build outputs
 dist/
+build/
+.next/
+out/
 
-# Deploy artifacts
-deploy.zip
-
-# Logs
-logs
-*.log
-npm-debug.log*
-
-# Environment variables
+# Environment files
 .env
 .env.local
 .env.*.local
 
-# Editor
-.vscode/*
-!.vscode/extensions.json
+# IDE
 .idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.vscode/
+*.swp
+*.swo
+*~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# Temp files
-tmpclaude-*
-nul
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+.eggs/
+
+# Testing
+coverage/
+.nyc_output/
+.pytest_cache/
+
+# Misc
+*.local
+.cache/
