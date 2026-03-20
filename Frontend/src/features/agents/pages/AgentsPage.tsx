@@ -30,6 +30,8 @@ import {
 } from '../services/agents.data';
 import { getControls } from '../../controls/services/controls.data';
 import { getVendors } from '../../vendors/services/vendors.data';
+import { getDivisions } from '../../library/services/library.data';
+import type { Division } from '../../library/types';
 
 import { AgentAvatar } from '../components/AgentAvatar';
 import { LogRow } from '../components/LogRow';
@@ -182,15 +184,17 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     document: DOCUMENT_CONTROLS,
   });
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>(SUPPLIERS_LIST);
+  const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // Fetch controls and vendors on mount
   useEffect(() => {
     (async () => {
       try {
-        const [controlsData, vendorsData] = await Promise.all([
+        const [controlsData, vendorsData, divisionsData] = await Promise.all([
           getControls(),
           getVendors(),
+          getDivisions(),
         ]);
 
         // Group controls by category
@@ -207,8 +211,10 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         // Extract vendor names
         const vendorNames = vendorsData.map(v => v.name);
         setAvailableSuppliers(vendorNames.length > 0 ? vendorNames : SUPPLIERS_LIST);
+
+        setAvailableDivisions(divisionsData);
       } catch (err) {
-        console.error('Failed to load controls/vendors:', err);
+        console.error('Failed to load controls/vendors/divisions:', err);
         // Keep using fallback data from constants
       } finally {
         setDataLoading(false);
@@ -565,7 +571,22 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
               </div>
               <div>
                 <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Division</label>
-                <input className="w-full border border-slate-200 rounded-lg text-sm text-slate-700 outline-none py-2.5 px-3" placeholder="e.g., Marketing Dept" value={division} onChange={(e) => setDivision(e.target.value)} />
+                <div className="relative">
+                  <select
+                    className="w-full border border-slate-200 rounded-lg text-sm text-slate-700 outline-none py-2.5 px-3 bg-white appearance-none pr-8"
+                    value={division}
+                    onChange={(e) => setDivision(e.target.value)}
+                  >
+                    <option value="">Select a division…</option>
+                    {availableDivisions.map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+                {availableDivisions.length === 0 && (
+                  <div className="text-xs text-slate-400 mt-1">No divisions found — add divisions in the Library first.</div>
+                )}
               </div>
             </>
           )}

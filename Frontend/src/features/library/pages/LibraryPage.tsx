@@ -231,9 +231,61 @@ export function LibraryPage() {
     (async () => {
       try {
         const data = await getGraphData();
-        if (data.divisions) setDivisions(data.divisions);
-        if (data.suppliers) setSuppliers(data.suppliers);
-        if (data.systems) setSystems(data.systems);
+        let divs = data.divisions || [];
+        let sups = data.suppliers || [];
+        let syst = data.systems || [];
+
+        // --- Prevent initial cramped layout by applying a repulsive force relaxation ---
+        let nodes = [...divs, ...sups, ...syst] as any[];
+        for (let iter = 0; iter < 80; iter++) {
+          for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+              let u = nodes[i], v = nodes[j];
+              let dx = u.x - v.x, dy = u.y - v.y;
+              let dist = Math.sqrt(dx*dx + dy*dy) || 1;
+              let targetDist = u.type === 'crm' || v.type === 'crm' ? 80 : 100;
+              if (dist < targetDist) {
+                let force = (targetDist - dist) / dist * 0.15;
+                u.x += dx * force; u.y += dy * force;
+                v.x -= dx * force; v.y -= dy * force;
+              }
+            }
+          }
+          // Mild attraction to parents to keep them grouped loosely
+          for (let s of sups) {
+             let d = divs.find(x => x.id === s.divisionId);
+             if (d) { s.x += (d.x - s.x) * 0.01; s.y += (d.y - s.y) * 0.01; }
+          }
+          for (let s of syst) {
+             let ref = s.linkedSupplierId ? sups.find(x => x.id === s.linkedSupplierId) : divs.find(x => x.id === s.divisionId);
+             if (ref) { s.x += (ref.x - s.x) * 0.02; s.y += (ref.y - s.y) * 0.02; }
+          }
+        }
+
+        // --- Calculate structured lifecycle coords (lx, ly) to fix columns ---
+        const lCols: Record<string, any[]> = { Acquisition: [], Retention: [], Upgradation: [], Offboarding: [] };
+        nodes.forEach(n => {
+           let stage = n.lifecycleStage || n.stage;
+           if (stage && lCols[stage]) lCols[stage].push(n);
+        });
+
+        Object.entries(lCols).forEach(([stage, stageNodes]) => {
+           const col = LIFECYCLE_COLUMNS[stage as Stage];
+           if (col) {
+             const cx = (col.minFrac + col.maxFrac) / 2 * CANVAS_W;
+             stageNodes.forEach((n, idx) => {
+               // Assign a stable spread lx/ly layout inside the lifecycle column
+               if (n.lx === undefined || isNaN(n.lx)) {
+                 n.lx = cx + (Math.sin(idx) * 60) - 30; 
+                 n.ly = 150 + idx * 95;
+               }
+             });
+           }
+        });
+
+        setDivisions([...divs]);
+        setSuppliers([...sups]);
+        setSystems([...syst]);
         if (data.org) setOrgPos({ x: data.org.canvasX ?? data.org.x ?? 580, y: data.org.canvasY ?? data.org.y ?? 380 });
       } catch (err) {
         console.error('Failed to load library graph data:', err);
@@ -260,7 +312,6 @@ export function LibraryPage() {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      if (lifecycleView) return;
       const factor = e.deltaY > 0 ? 0.92 : 1.08;
       const rect = el.getBoundingClientRect();
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
@@ -280,10 +331,9 @@ export function LibraryPage() {
       const dx = e.clientX - drag.startMX, dy = e.clientY - drag.startMY;
       if (Math.abs(dx) + Math.abs(dy) >= 3) dragMovedRef.current = true;
       if (!dragMovedRef.current) return;
-      const activeScale = lifecycleView ? (containerWidth / CANVAS_W) : zoom;
+      const activeScale = zoom;
       const vdx = dx / activeScale, vdy = dy / activeScale;
       if (drag.type === 'canvas') {
-        if (lifecycleView) return;
         setPan({ x: drag.startX + dx, y: drag.startY + dy });
       } else if (drag.type === 'org') {
         setOrgPos({ x: drag.startX + vdx, y: drag.startY + vdy });
@@ -374,7 +424,7 @@ export function LibraryPage() {
     const r = el?.getBoundingClientRect();
     setDrag(null);
     if (!lifecycleView) {
-      setZoom(1);
+      setZoom(containerWidth / CANVAS_W);
       if (r) setPan({ x: 0, y: 48 });
       setLifecycleView(true);
     } else {
@@ -545,7 +595,7 @@ export function LibraryPage() {
             <option value="1y">1 year ago</option>
           </select>
           <span className="w-px h-5 bg-slate-200 inline-block mx-1" />
-          {[{ l: '+', fn: () => { if (!lifecycleView) setZoom(z => Math.min(3, z * 1.15)); } }, { l: '−', fn: () => { if (!lifecycleView) setZoom(z => Math.max(0.25, z / 1.15)); } }].map(b => (
+          {[{ l: '+', fn: () => { setZoom(z => Math.min(3, z * 1.15)); } }, { l: '−', fn: () => { setZoom(z => Math.max(0.25, z / 1.15)); } }].map(b => (
             <button key={b.l} onClick={b.fn} className="w-8 h-8 border border-slate-200 bg-white rounded-[6px] cursor-pointer text-base flex items-center justify-center text-slate-500 font-mono">{b.l}</button>
           ))}
           <button onClick={resetView} className="h-8 px-3 border border-slate-200 bg-white rounded-[6px] cursor-pointer text-xs text-slate-500 flex items-center gap-[5px]">
@@ -558,37 +608,36 @@ export function LibraryPage() {
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-slate-50 [background-image:radial-gradient(circle,#CBD5E1_1px,transparent_1px)] [background-size:24px_24px]"
-        style={{ cursor: lifecycleView ? 'default' : drag?.type === 'canvas' ? 'grabbing' : 'grab' }}
-        onMouseDown={e => { setModal(null); if (xrayMode) setSelectedId(null); if (!lifecycleView) startDrag('canvas', '', e, pan.x, pan.y); }}
+        style={{ cursor: drag?.type === 'canvas' ? 'grabbing' : 'grab' }}
+        onMouseDown={e => { setModal(null); if (xrayMode) setSelectedId(null); startDrag('canvas', '', e, pan.x, pan.y); }}
       >
-        {/* ═══ LIFECYCLE VIEW - Column headers only ═══ */}
-        {lifecycleView && (() => {
-          // Use actual container width so 4 columns fill the full visible area
-          const colPx = containerWidth / 4;
-          const dotColors: Record<Stage, string> = { Acquisition: '#0EA5E9', Retention: '#10B981', Upgradation: '#F59E0B', Offboarding: '#64748B' };
-          return (
-            <>
-              <div className="absolute top-0 left-0 right-0 h-12 z-20 flex pointer-events-none bg-slate-50 border-b border-gray-200">
-                {STAGES.map((stage, i) => {
-                  const dot = dotColors[stage];
-                  const colDivs = lifecycleDivisions.filter(d => d.lifecycleStage === stage);
-                  return (
-                    <div key={stage} className={`absolute h-12 flex items-center gap-2 px-4 pointer-events-auto bg-slate-50 overflow-hidden ${i < 3 ? 'border-r border-gray-200' : ''}`} style={{ left: i * colPx, width: colPx }}>
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
-                      <span className="text-[13px] font-semibold text-slate-900 tracking-[-0.01em] flex-1 whitespace-nowrap overflow-hidden text-ellipsis">Customer {stage}</span>
-                      {colDivs.length > 0 && <span className="text-[11px] text-slate-400 mr-1 whitespace-nowrap">{colDivs.length} div{colDivs.length !== 1 ? 's' : ''}</span>}
-                      <button onClick={(e) => { e.stopPropagation(); const col = LIFECYCLE_COLUMNS[stage]; const colCenterCanvasX = (col.minFrac + col.maxFrac) / 2 * CANVAS_W; const existingCount = lifecycleDivisions.filter(d => d.lifecycleStage === stage).length; const spawnY = 110 + existingCount * 260; setModal({ type: 'addDiv', spawnX: colCenterCanvasX, spawnY, lifecycleStage: stage }); }} className="w-[26px] h-[26px] rounded-full bg-emerald-500 border-none flex items-center justify-center cursor-pointer text-white text-lg leading-none shadow-[0_2px_8px_rgba(16,185,129,0.35)] shrink-0" title={`Add Division to ${stage}`}>+</button>
-                    </div>
-                  );
-                })}
-              </div>
-              {[1, 2, 3].map(i => <div key={i} className="absolute top-12 bottom-0 w-px bg-gray-200/70 z-[4] pointer-events-none" style={{ left: i * colPx }} />)}
-            </>
-          );
-        })()}
-
         {/* ═══ Canvas with nodes (shown in both views) ═══ */}
-        <div className="absolute origin-[0_0] w-[1600px] h-[1000px]" style={{ transform: lifecycleView ? `translate(0px,48px) scale(${containerWidth / CANVAS_W})` : `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }} onMouseDown={e => { if (e.target === e.currentTarget && !lifecycleView) startDrag('canvas', '', e, pan.x, pan.y); }}>
+        <div className="absolute origin-[0_0] w-[1600px] h-[1000px]" style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }} onMouseDown={e => { if (e.target === e.currentTarget) startDrag('canvas', '', e, pan.x, pan.y); }}>
+          
+          {/* ═══ LIFECYCLE VIEW - Column headers only ═══ */}
+          {lifecycleView && (() => {
+            const colPx = CANVAS_W / 4;
+            const dotColors: Record<Stage, string> = { Acquisition: '#0EA5E9', Retention: '#10B981', Upgradation: '#F59E0B', Offboarding: '#64748B' };
+            return (
+              <>
+                <div className="absolute top-0 left-0 right-0 h-[64px] z-20 flex pointer-events-none bg-slate-50/90 backdrop-blur-sm border-b border-gray-200">
+                  {STAGES.map((stage, i) => {
+                    const dot = dotColors[stage];
+                    const colDivs = lifecycleDivisions.filter(d => d.lifecycleStage === stage);
+                    return (
+                      <div key={stage} className={`absolute h-[64px] flex items-center gap-3 px-6 pointer-events-auto overflow-hidden ${i < 3 ? 'border-r border-gray-200' : ''}`} style={{ left: i * colPx, width: colPx }}>
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+                        <span className="text-[20px] font-semibold text-slate-900 tracking-[-0.01em] flex-1 whitespace-nowrap overflow-hidden text-ellipsis">Customer {stage}</span>
+                        {colDivs.length > 0 && <span className="text-[13px] font-medium text-slate-400 mr-2 whitespace-nowrap">{colDivs.length} div{colDivs.length !== 1 ? 's' : ''}</span>}
+                        <button onClick={(e) => { e.stopPropagation(); const col = LIFECYCLE_COLUMNS[stage]; const colCenterCanvasX = (col.minFrac + col.maxFrac) / 2 * CANVAS_W; const existingCount = lifecycleDivisions.filter(d => d.lifecycleStage === stage).length; const spawnY = 110 + existingCount * 260; setModal({ type: 'addDiv', spawnX: colCenterCanvasX, spawnY, lifecycleStage: stage }); }} className="w-8 h-8 rounded-full bg-emerald-500 border-none flex items-center justify-center cursor-pointer text-white text-[22px] leading-none shadow-md shrink-0 transition-transform active:scale-95 hover:bg-emerald-400" title={`Add Division to ${stage}`}>+</button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {[1, 2, 3].map(i => <div key={i} className="absolute top-[64px] bottom-[-2000px] w-px bg-gray-200/80 z-[4] pointer-events-none shadow-sm" style={{ left: i * colPx, height: CANVAS_H * 3 }} />)}
+              </>
+            );
+          })()}
           <svg className="absolute inset-0 pointer-events-none overflow-visible" width={CANVAS_W} height={CANVAS_H}>
             <defs>
               <marker id="arrow-share" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#0EA5E9" opacity="0.8" /></marker>

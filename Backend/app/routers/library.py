@@ -101,6 +101,14 @@ def delete_division(
     div = db.query(Division).filter(Division.id == div_id).first()
     if not div:
         raise HTTPException(status_code=404, detail="Division not found")
+
+    # Cascade: delete child system_nodes and supplier_nodes first
+    supplier_ids = [s.id for s in db.query(SupplierNode).filter(SupplierNode.division_id == div_id).all()]
+    if supplier_ids:
+        db.query(SystemNode).filter(SystemNode.linked_supplier_id.in_(supplier_ids)).delete(synchronize_session=False)
+    db.query(SystemNode).filter(SystemNode.division_id == div_id).delete(synchronize_session=False)
+    db.query(SupplierNode).filter(SupplierNode.division_id == div_id).delete(synchronize_session=False)
+
     db.delete(div)
     db.commit()
 
@@ -146,6 +154,10 @@ def delete_supplier_node(
     node = db.query(SupplierNode).filter(SupplierNode.id == node_id).first()
     if not node:
         raise HTTPException(status_code=404, detail="Supplier node not found")
+
+    # Cascade: delete any system_nodes linked to this supplier first
+    db.query(SystemNode).filter(SystemNode.linked_supplier_id == node_id).delete(synchronize_session=False)
+
     db.delete(node)
     db.commit()
 
