@@ -15,12 +15,12 @@ router = APIRouter(prefix="/vendors", tags=["vendors"])
 
 
 @router.get("", response_model=List[VendorResponse])
-def list_vendors(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_vendors(db: Session = Depends(get_db)):
     return db.query(Vendor).order_by(Vendor.name).all()
 
 
 @router.get("/{vendor_id}", response_model=VendorResponse)
-def get_vendor(vendor_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_vendor(vendor_id: str, db: Session = Depends(get_db)):
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
@@ -32,16 +32,12 @@ def create_vendor(
     payload: VendorCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     vendor = Vendor(id=str(uuid.uuid4()), **payload.model_dump())
     recalculate_vendor_risk(vendor)
     db.add(vendor)
     db.commit()
     db.refresh(vendor)
-    AuditService.log(db, current_user, "Supplier Added", vendor.name,
-                     f"New vendor {vendor.name} added in {vendor.stage} stage",
-                     get_client_ip(request))
     return vendor
 
 
@@ -51,7 +47,6 @@ def update_vendor(
     payload: VendorUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
@@ -63,8 +58,6 @@ def update_vendor(
     recalculate_vendor_risk(vendor)
     db.commit()
     db.refresh(vendor)
-    AuditService.log(db, current_user, "Control Updated", vendor.name,
-                     f"Vendor {vendor.name} updated", get_client_ip(request))
     return vendor
 
 
@@ -73,7 +66,6 @@ def delete_vendor(
     vendor_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
@@ -81,5 +73,3 @@ def delete_vendor(
     name = vendor.name
     db.delete(vendor)
     db.commit()
-    AuditService.log(db, current_user, "Supplier Added", name,
-                     f"Vendor {name} deleted", get_client_ip(request), status="Warning")

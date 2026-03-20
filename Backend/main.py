@@ -16,24 +16,19 @@ from app.routers import (
     auth_router, vendors_router, agents_router, controls_router,
     risks_router, dashboard_router, audit_logs_router, documents_router,
     roles_router, templates_router, library_router, settings_router,
+    portal_router,
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create all tables that don't exist yet
     Base.metadata.create_all(bind=engine)
-
-    # Seed mock data on first run
     db = SessionLocal()
     try:
         seed_all(db)
     finally:
         db.close()
-
-    yield  # app is running
-
-    # Shutdown — nothing to clean up for now
+    yield
 
 
 app = FastAPI(
@@ -46,12 +41,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS — allow the Vite dev server ──────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",   # Vite default
-        "http://localhost:5174",   # Vite alternate port
+        "http://localhost:5173",
+        "http://localhost:5174",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
     ],
@@ -60,11 +54,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Mount uploads so documents can be served statically ───
 os.makedirs("app/uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
 
-# ── Register all routers under /api prefix ─────────────────
 PREFIX = "/api"
 
 app.include_router(auth_router,       prefix=PREFIX)
@@ -79,6 +71,7 @@ app.include_router(roles_router,      prefix=PREFIX)
 app.include_router(templates_router,  prefix=PREFIX)
 app.include_router(library_router,    prefix=PREFIX)
 app.include_router(settings_router,   prefix=PREFIX)
+app.include_router(portal_router,     prefix=PREFIX)
 
 
 @app.get("/api/health")

@@ -14,12 +14,12 @@ router = APIRouter(prefix="/controls", tags=["controls"])
 
 
 @router.get("", response_model=List[ControlResponse])
-def list_controls(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_controls(db: Session = Depends(get_db)):
     return db.query(Control).order_by(Control.category, Control.name).all()
 
 
 @router.get("/{control_id}", response_model=ControlResponse)
-def get_control(control_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_control(control_id: str, db: Session = Depends(get_db)):
     control = db.query(Control).filter(Control.id == control_id).first()
     if not control:
         raise HTTPException(status_code=404, detail="Control not found")

@@ -1,7 +1,7 @@
-import type { Stage } from '@/types/shared';
+import type { Stage } from '../../../types/shared';
 import type { Division, Supplier, SystemNode, StageData, GraphData, DivisionCreate, SupplierCreate, SystemCreate, OrgNode } from '../types';
-import { api } from '@/lib/api';
-import { withFallback, toCamelCase, toSnakeCase } from '@/lib/apiUtils';
+import { api } from '../../../lib/api';
+import { withFallback, toCamelCase, toSnakeCase } from '../../../lib/apiUtils';
 
 /* ── Graph View Constants ──────────────────────────────── */
 
@@ -271,11 +271,35 @@ export async function getGraphData(): Promise<GraphData> {
     org: { ...INIT_ORG },
   };
 
-  return withFallback(
+  const result = await withFallback(
     async () => toCamelCase(await api.get<unknown>('/library/graph')),
     mockData,
     'library-graph'
   );
+
+  // Normalize coordinates: ensure all nodes have x/y coordinates
+  return {
+    org: {
+      ...result.org,
+      x: result.org.canvasX ?? result.org.x ?? INIT_ORG.x,
+      y: result.org.canvasY ?? result.org.y ?? INIT_ORG.y,
+    },
+    divisions: result.divisions?.map(div => ({
+      ...div,
+      x: (div as any).canvasX ?? div.x ?? 0,
+      y: (div as any).canvasY ?? div.y ?? 0,
+    })) ?? [],
+    suppliers: result.suppliers?.map(sup => ({
+      ...sup,
+      x: (sup as any).canvasX ?? sup.x ?? 0,
+      y: (sup as any).canvasY ?? sup.y ?? 0,
+    })) ?? [],
+    systems: result.systems?.map(sys => ({
+      ...sys,
+      x: (sys as any).canvasX ?? sys.x ?? 0,
+      y: (sys as any).canvasY ?? sys.y ?? 0,
+    })) ?? [],
+  };
 }
 
 /**
@@ -289,7 +313,7 @@ export async function getHealthcareStages(): Promise<StageData[]> {
   }));
 
   return withFallback(
-    async () => toCamelCase(await api.get<unknown[]>('/library/healthcare/stages')),
+    async () => toCamelCase(await api.get<unknown[]>('/library/healthcare')),
     mockData,
     'healthcare-stages'
   );
@@ -301,7 +325,14 @@ export async function getHealthcareStages(): Promise<StageData[]> {
 export async function createDivision(division: DivisionCreate): Promise<Division> {
   const payload = toSnakeCase(division);
   const result = await api.post<Record<string, unknown>>('/library/divisions', payload);
-  return toCamelCase<Division>(result);
+  const camelResult = toCamelCase<Division>(result);
+
+  // Normalize coordinates: map canvasX/canvasY to x/y for frontend compatibility
+  return {
+    ...camelResult,
+    x: camelResult.canvasX ?? (camelResult as any).x ?? 0,
+    y: camelResult.canvasY ?? (camelResult as any).y ?? 0,
+  };
 }
 
 /**
@@ -310,7 +341,14 @@ export async function createDivision(division: DivisionCreate): Promise<Division
 export async function createSupplier(supplier: SupplierCreate): Promise<Supplier> {
   const payload = toSnakeCase(supplier);
   const result = await api.post<Record<string, unknown>>('/library/suppliers', payload);
-  return toCamelCase<Supplier>(result);
+  const camelResult = toCamelCase<Supplier>(result);
+
+  // Normalize coordinates: map canvasX/canvasY to x/y for frontend compatibility
+  return {
+    ...camelResult,
+    x: camelResult.canvasX ?? (camelResult as any).x ?? 0,
+    y: camelResult.canvasY ?? (camelResult as any).y ?? 0,
+  };
 }
 
 /**
@@ -319,7 +357,14 @@ export async function createSupplier(supplier: SupplierCreate): Promise<Supplier
 export async function createSystem(system: SystemCreate): Promise<SystemNode> {
   const payload = toSnakeCase(system);
   const result = await api.post<Record<string, unknown>>('/library/systems', payload);
-  return toCamelCase<SystemNode>(result);
+  const camelResult = toCamelCase<SystemNode>(result);
+
+  // Normalize coordinates: map canvasX/canvasY to x/y for frontend compatibility
+  return {
+    ...camelResult,
+    x: camelResult.canvasX ?? (camelResult as any).x ?? 0,
+    y: camelResult.canvasY ?? (camelResult as any).y ?? 0,
+  };
 }
 
 /**
@@ -344,4 +389,81 @@ export async function updateSupplierStage(
   const payload = toSnakeCase({ stage });
   const result = await api.patch<Record<string, unknown>>(`/library/suppliers/${supplierId}/stage`, payload);
   return toCamelCase<Supplier>(result);
+}
+
+/**
+ * Delete a division
+ */
+export async function deleteDivision(divisionId: string): Promise<void> {
+  await api.delete(`/library/divisions/${divisionId}`);
+}
+
+/**
+ * Delete a supplier
+ */
+export async function deleteSupplier(supplierId: string): Promise<void> {
+  await api.delete(`/library/suppliers/${supplierId}`);
+}
+
+/**
+ * Delete a system
+ */
+export async function deleteSystem(systemId: string): Promise<void> {
+  await api.delete(`/library/systems/${systemId}`);
+}
+
+/**
+ * Update a supplier node
+ */
+export async function updateSupplier(supplierId: string, updates: Partial<Supplier>): Promise<Supplier> {
+  const payload = toSnakeCase(updates);
+  const result = await api.patch<Record<string, unknown>>(`/library/suppliers/${supplierId}`, payload);
+  const camelResult = toCamelCase<Supplier>(result);
+
+  // Normalize coordinates: map canvasX/canvasY to x/y for frontend compatibility
+  return {
+    ...camelResult,
+    x: camelResult.canvasX ?? (camelResult as any).x ?? 0,
+    y: camelResult.canvasY ?? (camelResult as any).y ?? 0,
+  };
+}
+
+/**
+ * Update a system node
+ */
+export async function updateSystem(systemId: string, updates: Partial<SystemNode>): Promise<SystemNode> {
+  const payload = toSnakeCase(updates);
+  const result = await api.patch<Record<string, unknown>>(`/library/systems/${systemId}`, payload);
+  const camelResult = toCamelCase<SystemNode>(result);
+
+  // Normalize coordinates: map canvasX/canvasY to x/y for frontend compatibility
+  return {
+    ...camelResult,
+    x: camelResult.canvasX ?? (camelResult as any).x ?? 0,
+    y: camelResult.canvasY ?? (camelResult as any).y ?? 0,
+  };
+}
+
+/**
+ * Update a division
+ */
+export async function updateDivision(divisionId: string, updates: Partial<Division>): Promise<Division> {
+  const payload = toSnakeCase(updates);
+  const result = await api.patch<Record<string, unknown>>(`/library/divisions/${divisionId}`, payload);
+  const camelResult = toCamelCase<Division>(result);
+
+  // Normalize coordinates: map canvasX/canvasY to x/y for frontend compatibility
+  return {
+    ...camelResult,
+    x: camelResult.canvasX ?? (camelResult as any).x ?? 0,
+    y: camelResult.canvasY ?? (camelResult as any).y ?? 0,
+  };
+}
+
+/**
+ * Get all divisions (departments) for use in dropdowns
+ */
+export async function getDivisions(): Promise<Division[]> {
+  const graphData = await getGraphData();
+  return graphData.divisions;
 }

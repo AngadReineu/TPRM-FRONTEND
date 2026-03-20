@@ -10,9 +10,11 @@ from .roles      import router as roles_router
 from .templates  import router as templates_router
 from .library    import router as library_router
 from .settings   import router as settings_router
+from .portal     import router as portal_router
 
 __all__ = [
     "auth_router", "vendors_router", "agents_router", "controls_router",
     "risks_router", "dashboard_router", "audit_logs_router", "documents_router",
     "roles_router", "templates_router", "library_router", "settings_router",
+    "portal_router",
 ]

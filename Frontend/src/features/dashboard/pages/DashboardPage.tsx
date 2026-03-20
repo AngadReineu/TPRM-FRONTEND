@@ -10,8 +10,8 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 
-import { StageBadge } from '@/components/common/StageBadge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { StageBadge } from '../../../components/common/StageBadge';
+import { Skeleton } from '../../../components/ui/skeleton';
 
 import { WidgetCard } from '../components/WidgetCard';
 import { WidgetHeader } from '../components/WidgetHeader';
@@ -286,7 +286,7 @@ export function DashboardPage() {
         <WidgetCard>
           <WidgetHeader
             title="Supplier Risk by Stage"
-            action="View All \u2192"
+            action="View All"
             onAction={() => navigate('/tprm')}
           />
           <div>
@@ -335,8 +335,8 @@ export function DashboardPage() {
         <WidgetCard>
           <WidgetHeader
             title="Risk Score Trend"
-            subtitle="Aug 2025 \u2013 Feb 2026"
-            action="Full Report \u2192"
+            subtitle="Aug 2025 - Feb 2026"
+            action="Full Report "
             onAction={() => navigate('/risk-threat')}
           />
           <ResponsiveContainer width="100%" height={228}>

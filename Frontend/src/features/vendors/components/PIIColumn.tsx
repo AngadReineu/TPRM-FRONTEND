@@ -6,6 +6,7 @@ interface PIIColumnProps {
   pii: Supplier['pii'];
   assessment: AssessmentStatus;
   piiFlow?: PiiFlow;
+  onConfigure?: () => void;
 }
 
 const FLOW_CONFIG: Record<PiiFlow, { icon: typeof MoveUpRight; color: string; label: string }> = {
@@ -25,7 +26,7 @@ function FlowIndicator({ piiFlow }: { piiFlow?: PiiFlow }) {
   );
 }
 
-export function PIIColumn({ pii, assessment, piiFlow }: PIIColumnProps) {
+export function PIIColumn({ pii, assessment, piiFlow, onConfigure }: PIIColumnProps) {
   /* Not configured and not 'configure' method */
   if (!pii.configured && pii.method !== 'configure') {
     return (
@@ -44,6 +45,7 @@ export function PIIColumn({ pii, assessment, piiFlow }: PIIColumnProps) {
         <button
           disabled={!canConfigure}
           title={canConfigure ? 'Configure PII sharing' : 'Available after assessment is complete'}
+          onClick={onConfigure}
           className={`text-xs font-semibold bg-transparent border-none p-0 ${
             canConfigure
               ? 'text-sky-500 cursor-pointer'

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, X, Check, CheckCircle2, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { getHealthcareStages, deleteSupplier, deleteSystem } from '../services/library.data';
+import { createVendor } from '../../vendors/services/vendors.data';
 
 /* ── Types ───────────────────────────────────────────── */
 type SupplierState = 'pending' | 'overdue' | 'complete_unconfigured' | 'active';
@@ -9,6 +11,7 @@ type SupplierState = 'pending' | 'overdue' | 'complete_unconfigured' | 'active';
 interface SupplierCard {
   id: string;
   name: string;
+  email?: string;
   state: SupplierState;
   score?: number;
   risk?: string;
@@ -90,60 +93,110 @@ const initialStages: StageData[] = [
 ];
 
 /* ── Supplier Card component ─────────────────────────── */
-function SupplierCardView({ supplier, onConfigure }: { supplier: SupplierCard; onConfigure: (s: SupplierCard) => void }) {
-  const stateClasses: Record<SupplierState, string> = {
-    pending: 'bg-white border border-slate-200',
-    overdue: 'bg-red-50 border border-red-200',
-    complete_unconfigured: 'bg-emerald-50 border border-emerald-200',
-    active: 'bg-white border border-slate-200',
+function SupplierCardView({
+  supplier,
+  onConfigure,
+  onRemove,
+}: {
+  supplier: SupplierCard;
+  onConfigure: (s: SupplierCard) => void;
+  onRemove: (supplierId: string) => void;
+}) {
+  const stateConfig: Record<SupplierState, { bg: string; border: string }> = {
+    pending: { bg: 'bg-white', border: 'border-slate-200' },
+    overdue: { bg: 'bg-red-50', border: 'border-red-200' },
+    complete_unconfigured: { bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    active: { bg: 'bg-white', border: 'border-sky-200' },
   };
 
+  const config = stateConfig[supplier.state];
+
   return (
-    <div className={`${stateClasses[supplier.state]} rounded-lg p-3 mb-1.5`}>
-      <div className="text-[13px] font-bold text-slate-900 mb-1">{supplier.name}</div>
+    <div className={`${config.bg} border ${config.border} rounded-lg p-3 transition-all hover:shadow-sm group`}>
+      <div className="flex items-start justify-between mb-1.5">
+        <div className="text-[13px] font-bold text-slate-900 leading-tight">{supplier.name}</div>
+        <Trash2
+          size={12}
+          className="text-slate-300 cursor-pointer hover:text-red-500 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => {
+            if (window.confirm(`Remove "${supplier.name}"?`)) {
+              onRemove(supplier.id);
+            }
+          }}
+        />
+      </div>
+
       {supplier.state === 'pending' && (
         <>
-          <span className="bg-amber-50 text-amber-500 text-[11px] font-semibold px-2 py-0.5 rounded-[5px]">Assessment Pending</span>
-          <div className="text-xs text-slate-400 mt-1">{supplier.daysInfo}</div>
-          <div className="flex justify-end gap-1.5 mt-2">
-            <button
-              onClick={() => toast.success(`Reminder sent to ${supplier.name}`)}
-              className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-[5px] px-2.5 py-[3px] cursor-pointer"
-            >
-              Send Reminder
-            </button>
-          </div>
-        </>
-      )}
-      {supplier.state === 'overdue' && (
-        <>
-          <span className="bg-red-50 text-red-500 text-[11px] font-semibold px-2 py-0.5 rounded-[5px]">Assessment Overdue</span>
-          <div className="text-xs text-red-500 mt-1">{supplier.daysInfo}</div>
+          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-600 text-[10px] font-semibold px-2 py-0.5 rounded">
+            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+            Pending
+          </span>
+          <div className="text-[11px] text-slate-400 mt-1.5">{supplier.daysInfo}</div>
           <div className="flex justify-end mt-2">
             <button
               onClick={() => toast.success(`Reminder sent to ${supplier.name}`)}
-              className="text-[11px] text-red-500 bg-red-50 border border-red-200 rounded-[5px] px-2.5 py-[3px] cursor-pointer"
+              className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded px-2.5 py-1 cursor-pointer hover:bg-slate-50 hover:border-slate-300 transition-colors"
             >
               Send Reminder
             </button>
           </div>
         </>
       )}
+
+      {supplier.state === 'overdue' && (
+        <>
+          <span className="inline-flex items-center gap-1 bg-red-100 text-red-600 text-[10px] font-semibold px-2 py-0.5 rounded">
+            <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+            Overdue
+          </span>
+          <div className="text-[11px] text-red-500 mt-1.5">{supplier.daysInfo}</div>
+          <div className="flex justify-end mt-2">
+            <button
+              onClick={() => toast.success(`Reminder sent to ${supplier.name}`)}
+              className="text-[11px] text-red-500 bg-red-50 border border-red-200 rounded px-2.5 py-1 cursor-pointer hover:bg-red-100 transition-colors"
+            >
+              Send Reminder
+            </button>
+          </div>
+        </>
+      )}
+
       {supplier.state === 'complete_unconfigured' && (
         <>
-          <span className="bg-emerald-50 text-emerald-500 text-[11px] font-semibold px-2 py-0.5 rounded-[5px]">Assessment Complete</span>
-          <div className="text-xs text-slate-500 mt-1">Score: <strong className="text-amber-500">{supplier.score}</strong> {supplier.risk}</div>
-          <button onClick={() => onConfigure(supplier)} className="text-xs font-semibold text-sky-500 bg-transparent border-none cursor-pointer py-1 block mt-1">
+          <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-600 text-[10px] font-semibold px-2 py-0.5 rounded">
+            <CheckCircle2 size={10} />
+            Assessed
+          </span>
+          <div className="text-[11px] text-slate-500 mt-1.5">
+            Score: <strong className="text-amber-500">{supplier.score}</strong> · {supplier.risk} Risk
+          </div>
+          <button
+            onClick={() => onConfigure(supplier)}
+            className="text-[11px] font-semibold text-sky-500 bg-transparent border-none cursor-pointer py-1 block mt-1 hover:text-sky-600 transition-colors"
+          >
             Configure Data Sharing →
           </button>
         </>
       )}
+
       {supplier.state === 'active' && (
         <>
-          <span className="bg-emerald-50 text-emerald-500 text-[11px] font-semibold px-2 py-0.5 rounded-[5px]">Active</span>
-          <div className="text-xs text-slate-500 mt-1">Score: <strong>{supplier.score}</strong> {supplier.risk}</div>
-          <div className="flex gap-1 mt-1">{supplier.piiIcons?.map(icon => <span key={icon} className="bg-slate-100 text-slate-500 text-[10px] px-[5px] py-px rounded">{icon}</span>)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">{supplier.transferMethod} · Agent: {supplier.agent}</div>
+          <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-600 text-[10px] font-semibold px-2 py-0.5 rounded">
+            <CheckCircle2 size={10} />
+            Active
+          </span>
+          <div className="text-[11px] text-slate-500 mt-1.5">
+            Score: <strong>{supplier.score}</strong> · {supplier.risk} Risk
+          </div>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {supplier.piiIcons?.map(icon => (
+              <span key={icon} className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded">
+                {icon}
+              </span>
+            ))}
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1">{supplier.transferMethod} · Agent: {supplier.agent}</div>
         </>
       )}
     </div>
@@ -254,6 +307,7 @@ function AddSupplierModal({ stage, onClose, onAdd }: {
       const newSup: SupplierCard = {
         id: `sup_${Date.now()}`,
         name: form.name.trim(),
+        email: form.email.trim(),
         state: 'pending',
         daysInfo: 'Portal sent just now',
       };
@@ -379,9 +433,27 @@ function AddSupplierModal({ stage, onClose, onAdd }: {
 }
 
 /* ── Configure Data Sharing Panel ────────────────────── */
-function ConfigureDataPanel({ supplier, onClose }: { supplier: SupplierCard; onClose: () => void }) {
-  const [selectedPII, setSelectedPII] = useState(new Set(['name', 'email', 'phone']));
-  const [transferMethod, setTransferMethod] = useState('api');
+function ConfigureDataPanel({
+  supplier,
+  onClose,
+  onSave,
+}: {
+  supplier: SupplierCard;
+  onClose: () => void;
+  onSave: (updatedSupplier: SupplierCard) => void;
+}) {
+  // Initialize from existing supplier data or defaults
+  const [selectedPII, setSelectedPII] = useState<Set<string>>(
+    new Set(supplier.piiIcons || ['name', 'email', 'phone'])
+  );
+  const [transferMethod, setTransferMethod] = useState(supplier.transferMethod || 'api');
+  const [authorizedBy, setAuthorizedBy] = useState('');
+  const [role, setRole] = useState('Risk Manager');
+  const [apiEndpoint, setApiEndpoint] = useState('');
+  const [apiAuth, setApiAuth] = useState('OAuth 2.0');
+  const [frequency, setFrequency] = useState('Real-time');
+  const [startDate, setStartDate] = useState('');
+
   const piiFields = [
     { id: 'name', label: 'Full Name' }, { id: 'aadhar', label: 'Aadhar / National ID' },
     { id: 'email', label: 'Email Address' }, { id: 'pan', label: 'PAN Number' },
@@ -390,6 +462,19 @@ function ConfigureDataPanel({ supplier, onClose }: { supplier: SupplierCard; onC
     { id: 'biometric', label: 'Biometric Data' }, { id: 'credentials', label: 'Login Credentials' },
   ];
   const togglePII = (id: string) => { const n = new Set(selectedPII); n.has(id) ? n.delete(id) : n.add(id); setSelectedPII(n); };
+
+  const handleSave = () => {
+    // Create updated supplier with data sharing configuration
+    const updatedSupplier: SupplierCard = {
+      ...supplier,
+      piiIcons: Array.from(selectedPII),
+      transferMethod,
+      state: 'active', // Mark as configured/active
+    };
+    onSave(updatedSupplier);
+    toast.success(`Data sharing configured for ${supplier.name}`);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-[200]">
@@ -424,11 +509,22 @@ function ConfigureDataPanel({ supplier, onClose }: { supplier: SupplierCard; onC
           <div className="grid grid-cols-2 gap-3 mb-5">
             <div>
               <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Authorized by *</label>
-              <input className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none mb-3" placeholder="Full name" />
+              <input
+                className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none mb-3"
+                placeholder="Full name"
+                value={authorizedBy}
+                onChange={e => setAuthorizedBy(e.target.value)}
+              />
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Role</label>
-              <select className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none appearance-none"><option>Risk Manager</option><option>DPO</option><option>Compliance Officer</option><option>Admin</option></select>
+              <select
+                className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none appearance-none"
+                value={role}
+                onChange={e => setRole(e.target.value)}
+              >
+                <option>Risk Manager</option><option>DPO</option><option>Compliance Officer</option><option>Admin</option>
+              </select>
             </div>
           </div>
           <div className="mb-5">
@@ -447,25 +543,47 @@ function ConfigureDataPanel({ supplier, onClose }: { supplier: SupplierCard; onC
           </div>
           {transferMethod === 'api' && (
             <div className="bg-slate-50 border border-slate-200 rounded-[10px] p-[14px] mb-5">
-              <input className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none mb-3" placeholder="Endpoint URL" />
-              <select className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none appearance-none"><option>OAuth 2.0</option><option>API Key</option></select>
+              <input
+                className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none mb-3"
+                placeholder="Endpoint URL"
+                value={apiEndpoint}
+                onChange={e => setApiEndpoint(e.target.value)}
+              />
+              <select
+                className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none appearance-none"
+                value={apiAuth}
+                onChange={e => setApiAuth(e.target.value)}
+              >
+                <option>OAuth 2.0</option><option>API Key</option>
+              </select>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3 mb-5">
             <div>
               <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Transfer Frequency *</label>
-              <select className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none appearance-none"><option>Real-time</option><option>Hourly</option><option>Daily</option><option>Weekly</option></select>
+              <select
+                className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none appearance-none"
+                value={frequency}
+                onChange={e => setFrequency(e.target.value)}
+              >
+                <option>Real-time</option><option>Hourly</option><option>Daily</option><option>Weekly</option>
+              </select>
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Transfer Start Date *</label>
-              <input type="date" className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none mb-3" />
+              <input
+                type="date"
+                className="w-full px-3 py-[9px] text-sm text-slate-700 border border-slate-200 rounded-lg outline-none mb-3"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+              />
             </div>
           </div>
         </div>
         <div className="px-6 py-[14px] border-t border-slate-200 flex justify-end gap-2.5 shrink-0 bg-white">
           <button onClick={onClose} className="bg-white text-slate-700 border border-slate-200 rounded-lg px-4 py-2.5 text-sm cursor-pointer">Cancel</button>
           <button
-            onClick={() => { toast.success(`Data sharing configured for ${supplier.name}`); onClose(); }}
+            onClick={handleSave}
             className="bg-sky-500 text-white border-none rounded-lg px-[18px] py-2.5 text-sm font-semibold cursor-pointer"
           >
             Save Configuration
@@ -484,112 +602,251 @@ export function LibraryHealthcarePage() {
   const [addSupplierStage, setAddSupplierStage] = useState<string | null>(null);
   const [configureSupplier, setConfigureSupplier] = useState<SupplierCard | null>(null);
 
+  // Load healthcare stages data from backend on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getHealthcareStages();
+        if (data && Array.isArray(data)) {
+          setStages(data);
+        }
+      } catch (err) {
+        console.error('Failed to load healthcare stages:', err);
+      }
+    })();
+  }, []);
+
   function handleAddSystem(stageLabel: string, sys: SystemCard) {
     setStages(prev => prev.map(s =>
       s.label === stageLabel ? { ...s, systems: [...s.systems, sys] } : s
     ));
   }
 
-  function handleAddSupplier(stageLabel: string, sup: SupplierCard) {
-    setStages(prev => prev.map(s =>
-      s.label === stageLabel ? { ...s, suppliers: [...s.suppliers, sup] } : s
-    ));
+  async function handleAddSupplier(stageLabel: string, sup: SupplierCard) {
+    try {
+      // Create vendor in backend database
+      const vendorData = {
+        name: sup.name,
+        email: sup.email || '',
+        stage: stageLabel as any,
+        stageColor: stages.find(s => s.label === stageLabel)?.color || '#0EA5E9',
+        score: sup.score || 0,
+        risk: sup.risk || 'Low',
+        riskColor: sup.risk === 'High' ? '#F59E0B' : sup.risk === 'Medium' ? '#64748B' : sup.risk === 'Low' ? '#10B981' : '#EF4444',
+        assessment: sup.state === 'active' ? 'complete' : sup.state === 'complete_unconfigured' ? 'complete' : 'pending',
+        pii: { configured: false },
+        piiFlow: null,
+        contractEnd: null,
+        contractWarning: false,
+        agentId: null,
+        internalSpoc: null,
+        externalSpoc: null,
+        lastActivity: 'just now',
+      };
+
+      await createVendor(vendorData);
+
+      // Update local state
+      setStages(prev => prev.map(s =>
+        s.label === stageLabel ? { ...s, suppliers: [...s.suppliers, sup] } : s
+      ));
+    } catch (err) {
+      console.error('Failed to create vendor:', err);
+      toast.error('Failed to add supplier to database');
+    }
+  }
+
+  function handleUpdateSupplier(updatedSupplier: SupplierCard) {
+    setStages(prev => prev.map(stage => ({
+      ...stage,
+      suppliers: stage.suppliers.map(sup =>
+        sup.id === updatedSupplier.id ? updatedSupplier : sup
+      ),
+    })));
+  }
+
+  async function handleRemoveSystem(stageLabel: string, systemId: string) {
+    try {
+      await deleteSystem(systemId);
+      setStages(prev => prev.map(stage =>
+        stage.label === stageLabel
+          ? { ...stage, systems: stage.systems.filter(sys => sys.id !== systemId) }
+          : stage
+      ));
+      toast.success('Process/System removed');
+    } catch (err) {
+      console.error('Failed to remove system:', err);
+      toast.error('Failed to remove system');
+    }
+  }
+
+  async function handleRemoveSupplier(stageLabel: string, supplierId: string) {
+    try {
+      await deleteSupplier(supplierId);
+      setStages(prev => prev.map(stage =>
+        stage.label === stageLabel
+          ? { ...stage, suppliers: stage.suppliers.filter(sup => sup.id !== supplierId) }
+          : stage
+      ));
+      toast.success('Supplier removed');
+    } catch (err) {
+      console.error('Failed to remove supplier:', err);
+      toast.error('Failed to remove supplier');
+    }
   }
 
   return (
-    <div className="max-w-[1200px]">
-      {/* Header */}
-      <div className="mb-5">
-        <button
-          onClick={() => navigate('/libraries')}
-          className="flex items-center gap-1.5 text-slate-500 bg-transparent border-none cursor-pointer text-sm mb-3 p-0 hover:text-[#0EA5E9]"
-        >
-          <ArrowLeft size={16} /> Back to Library
-        </button>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 m-0">Healthcare / Insurance Template</h1>
-            <p className="text-sm text-slate-500 mt-1 mb-0">Fill in your systems and suppliers for each stage</p>
-          </div>
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="mb-6">
           <button
-            className="bg-sky-500 text-white border-none rounded-lg px-4 py-[9px] text-sm font-semibold cursor-pointer hover:bg-[#0284C7]"
-            onClick={() => toast.success('Template saved and applied successfully!')}
+            onClick={() => navigate('/libraries')}
+            className="flex items-center gap-1.5 text-slate-500 bg-transparent border-none cursor-pointer text-sm mb-3 p-0 hover:text-sky-500 transition-colors"
           >
-            Save &amp; Apply Template
+            <ArrowLeft size={16} /> Back to Library
           </button>
-        </div>
-      </div>
-
-      {/* 4-Column Grid */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-        {/* Column headers */}
-        <div className="grid grid-cols-4 border-b border-slate-200">
-          {stages.map(stage => (
-            <div key={stage.id} className="px-4 py-[14px] border-r border-slate-200 flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
-              <span className="text-sm font-semibold text-slate-700">{stage.label}</span>
-              <span className="bg-slate-100 text-slate-500 text-[11px] px-[7px] py-px rounded-xl ml-auto">
-                {stage.systems.length + stage.suppliers.length}
-              </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 m-0">Customer Lifecycle Template</h1>
+              <p className="text-sm text-slate-500 mt-1 mb-0">Map your processes & suppliers across lifecycle stages</p>
             </div>
-          ))}
+            <button
+              className="bg-sky-500 text-white border-none rounded-lg px-5 py-2.5 text-sm font-semibold cursor-pointer hover:bg-sky-600 transition-colors shadow-sm whitespace-nowrap"
+              onClick={() => toast.success('Template saved and applied successfully!')}
+            >
+              Save & Apply Template
+            </button>
+          </div>
         </div>
 
-        {/* Column bodies */}
-        <div className="grid grid-cols-4">
-          {stages.map((stage, stageIdx) => (
-            <div
-              key={stage.id}
-              className={`p-3 min-h-[400px] ${stageIdx < stages.length - 1 ? 'border-r border-slate-200' : ''}`}
-            >
-              {/* Add System button */}
-              <button
-                onClick={() => setAddSystemStage(stage.label)}
-                className="w-full rounded-lg py-[9px] text-xs font-semibold bg-sky-500 text-white border-none cursor-pointer mb-2 hover:bg-[#0284C7]"
-              >
-                + Add Process/System
-              </button>
+        {/* 4-Column Grid with horizontal scroll on mobile */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <div className="min-w-[900px]">
+              {/* Column headers */}
+              <div className="grid grid-cols-4 border-b border-slate-200 bg-slate-50">
+                {stages.map((stage, idx) => (
+                  <div
+                    key={stage.id}
+                    className={`px-4 py-3.5 flex items-center gap-2.5 ${idx < stages.length - 1 ? 'border-r border-slate-200' : ''}`}
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0 shadow-sm"
+                      style={{ backgroundColor: stage.color }}
+                    />
+                    <span className="text-sm font-semibold text-slate-800">{stage.label}</span>
+                    <span className="bg-slate-200 text-slate-600 text-[11px] font-medium px-2 py-0.5 rounded-full ml-auto">
+                      {stage.systems.length + stage.suppliers.length}
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-              {/* System cards */}
-              {stage.systems.map(sys => (
-                <div key={sys.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 mb-1.5 relative">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-semibold text-slate-700">{sys.name}</span>
-                    <div className="flex gap-1">
-                      <Edit2 size={11} color="#94A3B8" className="cursor-pointer" />
-                      <Trash2 size={11} color="#94A3B8" className="cursor-pointer" />
+              {/* Column bodies */}
+              <div className="grid grid-cols-4">
+                {stages.map((stage, stageIdx) => (
+                  <div
+                    key={stage.id}
+                    className={`p-4 min-h-[500px] bg-white ${stageIdx < stages.length - 1 ? 'border-r border-slate-100' : ''}`}
+                  >
+                    {/* Systems Section */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Processes / Systems</div>
+                        <div className="flex-1 h-px bg-slate-100" />
+                      </div>
+
+                      {/* Add System button */}
+                      <button
+                        onClick={() => setAddSystemStage(stage.label)}
+                        className="w-full rounded-lg py-2.5 text-xs font-semibold bg-sky-500 text-white border-none cursor-pointer mb-3 hover:bg-sky-600 transition-colors shadow-sm flex items-center justify-center gap-1"
+                      >
+                        <span className="text-base leading-none">+</span> Add Process
+                      </button>
+
+                      {/* System cards */}
+                      <div className="space-y-2">
+                        {stage.systems.map(sys => (
+                          <div key={sys.id} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 hover:border-slate-300 transition-colors group">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[13px] font-semibold text-slate-700">{sys.name}</span>
+                              <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Edit2 size={12} className="text-slate-400 cursor-pointer hover:text-sky-500" />
+                                <Trash2
+                                  size={12}
+                                  className="text-slate-400 cursor-pointer hover:text-red-500"
+                                  onClick={() => {
+                                    if (window.confirm(`Remove "${sys.name}" from ${stage.label}?`)) {
+                                      handleRemoveSystem(stage.label, sys.id);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <span
+                              className="text-[11px] font-medium px-2 py-0.5 rounded mt-1.5 inline-block"
+                              style={{ backgroundColor: sys.methodColor + '15', color: sys.methodColor }}
+                            >
+                              {sys.method}
+                            </span>
+                          </div>
+                        ))}
+                        {stage.systems.length === 0 && (
+                          <div className="text-xs text-slate-400 text-center py-2">No processes added</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-dashed border-slate-200 my-4" />
+
+                    {/* Suppliers Section */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Suppliers</div>
+                        <div className="flex-1 h-px bg-slate-100" />
+                      </div>
+
+                      {/* Add Supplier button */}
+                      <button
+                        onClick={() => setAddSupplierStage(stage.label)}
+                        className="w-full rounded-lg py-2.5 text-xs font-semibold bg-violet-500 text-white border-none cursor-pointer mb-3 hover:bg-violet-600 transition-colors shadow-sm flex items-center justify-center gap-1"
+                      >
+                        <span className="text-base leading-none">+</span> Add Supplier
+                      </button>
+
+                      {/* Supplier cards */}
+                      <div className="space-y-2">
+                        {stage.suppliers.map(sup => (
+                          <SupplierCardView
+                            key={sup.id}
+                            supplier={sup}
+                            onConfigure={setConfigureSupplier}
+                            onRemove={(supplierId) => handleRemoveSupplier(stage.label, supplierId)}
+                          />
+                        ))}
+                        {stage.suppliers.length === 0 && (
+                          <div className="text-xs text-slate-400 text-center py-2">No suppliers — internal only</div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {/* Method badge — colors are dynamic from sys.methodColor */}
-                  <span
-                    className="text-[11px] font-medium px-2 py-0.5 rounded-[5px] mt-1 inline-block"
-                    style={{ backgroundColor: sys.methodColor + '20', color: sys.methodColor }}
-                  >
-                    {sys.method}
-                  </span>
-                </div>
-              ))}
-
-              {/* Divider */}
-              <div className="border-t border-dashed border-slate-200 my-2.5" />
-
-              {/* Add Supplier button */}
-              <button
-                onClick={() => setAddSupplierStage(stage.label)}
-                className="w-full rounded-lg py-[9px] text-xs font-semibold bg-violet-500 text-white border-none cursor-pointer mb-2 hover:bg-[#7C3AED]"
-              >
-                + Add Supplier
-              </button>
-
-              {/* Supplier cards */}
-              {stage.suppliers.map(sup => (
-                <SupplierCardView key={sup.id} supplier={sup} onConfigure={setConfigureSupplier} />
-              ))}
-              {stage.suppliers.length === 0 && (
-                <div className="text-xs text-slate-400 text-center py-3">No suppliers — internal only</div>
-              )}
+                ))}
+              </div>
             </div>
-          ))}
+          </div>
+        </div>
+
+        {/* Summary Footer */}
+        <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-500">
+          <span>
+            <strong className="text-slate-700">{stages.reduce((acc, s) => acc + s.systems.length, 0)}</strong> Processes
+          </span>
+          <span className="text-slate-300">|</span>
+          <span>
+            <strong className="text-slate-700">{stages.reduce((acc, s) => acc + s.suppliers.length, 0)}</strong> Suppliers
+          </span>
         </div>
       </div>
 
@@ -609,7 +866,11 @@ export function LibraryHealthcarePage() {
         />
       )}
       {configureSupplier && (
-        <ConfigureDataPanel supplier={configureSupplier} onClose={() => setConfigureSupplier(null)} />
+        <ConfigureDataPanel
+          supplier={configureSupplier}
+          onClose={() => setConfigureSupplier(null)}
+          onSave={handleUpdateSupplier}
+        />
       )}
     </div>
   );

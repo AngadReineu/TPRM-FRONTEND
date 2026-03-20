@@ -16,6 +16,8 @@ export interface Division {
   id: string;
   x: number;
   y: number;
+  lx?: number;
+  ly?: number;
   name: string;
   lifecycleStage?: Stage;
 }
@@ -25,6 +27,8 @@ export interface Supplier {
   divisionId: string;
   x: number;
   y: number;
+  lx?: number;
+  ly?: number;
   name: string;
   email: string;
   contact: string;
@@ -62,6 +66,8 @@ export interface SystemNode {
   divisionId: string;
   x: number;
   y: number;
+  lx?: number;
+  ly?: number;
   name: string;
   type: 'crm' | 'infra' | 'db';
   dataSource?: string;
@@ -88,8 +94,10 @@ export interface SystemNode {
 export interface OrgNode {
   id: string;
   name: string;
-  x: number;
-  y: number;
+  canvasX?: number;
+  canvasY?: number;
+  x?: number;
+  y?: number;
 }
 
 export interface GraphData {
@@ -104,20 +112,23 @@ export interface GraphData {
 export interface DivisionCreate {
   name: string;
   lifecycleStage?: Stage;
-  x?: number;
-  y?: number;
+  canvasX?: number;
+  canvasY?: number;
 }
 
 export interface SupplierCreate {
   divisionId: string;
+  canvasX?: number;
+  canvasY?: number;
   name: string;
-  email: string;
+  email?: string;
   contact?: string;
   phone?: string;
   website?: string;
   gst?: string;
   pan?: string;
   stage: Stage;
+  piiVolume?: PiiVolume;
   piiFlow?: PiiFlow;
   piiTypes?: string[];
   contractStart?: string;
@@ -129,11 +140,14 @@ export interface SupplierCreate {
 
 export interface SystemCreate {
   divisionId: string;
+  canvasX?: number;
+  canvasY?: number;
   name: string;
   type: 'crm' | 'infra' | 'db';
   stage?: Stage;
   dataSource?: string;
   authorizedPii?: string[];
+  piiTypes?: string[];
   vulnScore?: number;
   linkedSupplierId?: string;
 }

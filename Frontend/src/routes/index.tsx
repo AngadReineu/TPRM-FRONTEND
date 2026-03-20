@@ -7,6 +7,7 @@ import { RegisterPage }          from '../features/auth/pages/RegisterPage';
 import { DashboardPage }         from '../features/dashboard/pages/DashboardPage';
 import { ControlsPage }          from '../features/controls/pages/ControlsPage';
 import { CreateControlPage }     from '../features/controls/pages/CreateControlPage';
+import { ViewControlPage }       from '../features/controls/pages/ViewControlPage';
 import { AgentsPage }            from '../features/agents/pages/AgentsPage';
 import { AgentDetailPage }       from '../features/agents/pages/AgentDetailPage';
 import { LibraryPage }           from '../features/library/pages/LibraryPage';
@@ -19,6 +20,9 @@ import { RolesPage }             from '../features/roles/pages/RolesPage';
 import { SettingsPage }          from '../features/settings/pages/SettingsPage';
 import { TemplatesPage }         from '../features/templates/pages/TemplatesPage';
 
+// Supplier portal — public route, no auth required
+import { SupplierPortalPage }    from '../features/portal/pages/SupplierPortalPage';
+
 function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
@@ -28,7 +32,6 @@ function NotFound() {
   );
 }
 
-// Wrapper component for protected shell
 function ProtectedShell() {
   return (
     <ProtectedRoute>
@@ -42,6 +45,10 @@ export const router = createBrowserRouter([
   { path: '/login',    Component: LoginPage },
   { path: '/register', Component: RegisterPage },
 
+  // Supplier portal — public, no login needed
+  // Supplier receives a link like: https://yourdomain.com/portal/abc123token
+  { path: '/portal/:token/*', Component: SupplierPortalPage },
+
   // Protected app routes
   {
     path: '/',
@@ -50,6 +57,7 @@ export const router = createBrowserRouter([
       { index: true,                   Component: DashboardPage },
       { path: 'controls',              Component: ControlsPage },
       { path: 'controls/create',       Component: CreateControlPage },
+      { path: 'controls/:id',          Component: ViewControlPage },
       { path: 'agents',                Component: AgentsPage },
       { path: 'agents/:id',            Component: AgentDetailPage },
       { path: 'libraries',             Component: LibraryPage },

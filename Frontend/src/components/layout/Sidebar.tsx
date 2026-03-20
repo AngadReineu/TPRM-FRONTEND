@@ -1,7 +1,9 @@
 import { NavLink, useNavigate } from 'react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import { getAgents } from '@/features/agents/services/agents.data';
+import type { Agent } from '@/features/agents/types';
 import {
   LayoutDashboard, ScanLine, ShieldCheck, AlertCircle, Scan,
   FolderOpen, ClipboardList, Database, BookOpen, AlertTriangle,
@@ -87,8 +89,27 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [agents, setAgents] = useState<Agent[]>([]);
+
   const toggle = (section: string) =>
     setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
+
+  // Fetch agents on mount
+  useEffect(() => {
+    getAgents()
+      .then(setAgents)
+      .catch(err => console.error('Failed to fetch agents for sidebar:', err));
+  }, []);
+
+  // Status color mapping
+  const getStatusColor = (status: Agent['status']) => {
+    switch (status) {
+      case 'live': return 'bg-[#10B981]';
+      case 'active': return 'bg-[#0EA5E9]';
+      case 'syncing': return 'bg-[#F59E0B]';
+      default: return 'bg-[#94A3B8]';
+    }
+  };
 
   return (
     <div className="w-60 bg-[#1B2236] shadow-[2px_0_12px_rgba(0,0,0,0.3)] flex flex-col h-screen fixed top-0 left-0 z-50 font-[Inter,sans-serif]">
@@ -187,21 +208,25 @@ export function Sidebar() {
               </button>
             </div>
 
-            {/* Agent sub-items: A1, A2, A3 */}
-            {[
-              { label: 'Agent A1', dotClass: 'bg-[#0EA5E9]', id: 'a1' },
-              { label: 'Agent A2', dotClass: 'bg-[#10B981]', id: 'a2' },
-              { label: 'Agent A3', dotClass: 'bg-[#8B5CF6]', id: 'a3' },
-            ].map(a => (
+            {/* Agent sub-items: dynamically loaded */}
+            {agents.slice(0, 5).map(agent => (
               <div
-                key={a.id}
-                onClick={() => navigate('/agents', { state: { openAgentDetail: a.id } })}
+                key={agent.id}
+                onClick={() => navigate('/agents', { state: { openAgentDetail: agent.id } })}
                 className="flex items-center gap-2 py-[7px] pr-3 pl-9 rounded-md text-[12px] font-medium text-[#8B9CC8] cursor-pointer transition-all duration-150 mb-0.5 select-none hover:bg-white/[0.06] hover:!text-[#C8D3F5]"
               >
-                <span className={cn('w-2 h-2 rounded-full shrink-0 inline-block', a.dotClass)} />
-                {a.label}
+                <span className={cn('w-2 h-2 rounded-full shrink-0 inline-block', getStatusColor(agent.status))} />
+                {agent.name}
               </div>
             ))}
+            {agents.length > 5 && (
+              <div
+                onClick={() => navigate('/agents')}
+                className="py-[7px] pr-3 pl-9 text-[11px] text-[#4A5680] cursor-pointer hover:text-[#8B9CC8]"
+              >
+                +{agents.length - 5} more agents...
+              </div>
+            )}
 
             {/* Controls */}
             <FuncItem icon={Sliders} label="Controls" to="/controls" indent />
@@ -220,7 +245,7 @@ export function Sidebar() {
 
             {/* Supplier Portal — external link */}
             <a
-              href="#"
+              href="/portal/demo"
               target="_blank"
               rel="noreferrer"
               className={cn(itemClass(false, true), 'justify-start')}

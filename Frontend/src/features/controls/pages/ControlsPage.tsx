@@ -320,7 +320,7 @@ export function ControlsPage() {
                     <PersonalityBadge personality={c.personality} />
                   </td>
                   <td className={tdClass}>
-                    <RelationalContext internal={c.internalSPOC} external={c.externalSPOC} />
+                    <RelationalContext internal={c.internalSpoc} external={c.externalSpoc} />
                   </td>
                   <td className={tdClass}>
                     <CategoryBadge category={c.category} />
@@ -353,8 +353,14 @@ export function ControlsPage() {
                   </td>
                   <td className={tdClass}>
                     <div className="flex gap-0.5">
+                      <button
+                        title="View"
+                        onClick={() => navigate(`/controls/${c.id}`)}
+                        className="p-1.5 rounded-md bg-transparent border-none text-slate-400 cursor-pointer hover:text-sky-500 hover:bg-sky-50"
+                      >
+                        <Eye size={14} />
+                      </button>
                       {[
-                        { Icon: Eye, title: 'View', color: 'sky' },
                         { Icon: Pencil, title: 'Edit', color: 'sky' },
                         { Icon: Play, title: 'Run', color: 'sky' },
                       ].map(({ Icon, title, color }) => (

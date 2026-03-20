@@ -333,11 +333,11 @@ function Step1({ form, setForm }: { form: any; setForm: any }) {
                       Anomaly Checks &mdash; {p.title}
                     </div>
                     <div className="flex flex-col gap-[7px]">
-                      {[...presetChecks, ...customChecks].map(check => {
+                      {[...presetChecks, ...customChecks].map((check, idx) => {
                         const checked = selectedChecks.has(check);
                         return (
                           <label
-                            key={check}
+                            key={`${idx}-${check}`}
                             onClick={() => toggleCheck(check)}
                             className="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded-[7px] transition-all duration-100"
                             style={{
@@ -435,12 +435,12 @@ function Step1({ form, setForm }: { form: any; setForm: any }) {
    Step 2 -- Target Asset Scope
    ================================================================ */
 function Step2({ form, setForm }: { form: any; setForm: any }) {
-  const [selected, setSelected] = useState(new Set(assetCategories.filter(a => a.default).map(a => a.id)));
   const toggle = (id: string) => {
-    const n = new Set(selected);
-    n.has(id) ? n.delete(id) : n.add(id);
-    setSelected(n);
+    const current = new Set(form.selectedAssets || []);
+    current.has(id) ? current.delete(id) : current.add(id);
+    setForm({ ...form, selectedAssets: Array.from(current) });
   };
+  const selected = new Set(form.selectedAssets || []);
   return (
     <div>
       <div className="mb-5">
@@ -540,12 +540,11 @@ function Step2({ form, setForm }: { form: any; setForm: any }) {
    Step 3 -- Data Source
    ================================================================ */
 function Step3({ form, setForm }: { form: any; setForm: any }) {
-  const [sources, setSources] = useState(new Set(dataSources.filter(d => d.default).map(d => d.id)));
-  const [retention, setRetention] = useState('90 days');
+  const sources = new Set(form.dataSources || []);
   const toggleSource = (id: string) => {
-    const n = new Set(sources);
+    const n = new Set(form.dataSources || []);
     n.has(id) ? n.delete(id) : n.add(id);
-    setSources(n);
+    setForm({ ...form, dataSources: Array.from(n) });
   };
   return (
     <div>
@@ -594,11 +593,24 @@ function Step3({ form, setForm }: { form: any; setForm: any }) {
         <div className="bg-slate-50 border border-slate-200 rounded-[10px] p-4 mb-5">
           <div className="text-[13px] font-semibold text-slate-700 mb-3">API Configuration</div>
           <div className="flex flex-col gap-3">
-            <input className={INPUT_CLS} placeholder="Endpoint URL" />
-            <select className={`${INPUT_CLS} appearance-none`}>
+            <input
+              className={INPUT_CLS}
+              placeholder="Endpoint URL"
+              value={form.apiEndpoint || ''}
+              onChange={e => setForm({ ...form, apiEndpoint: e.target.value })}
+            />
+            <select
+              className={`${INPUT_CLS} appearance-none`}
+              value={form.apiAuth || 'OAuth 2.0'}
+              onChange={e => setForm({ ...form, apiAuth: e.target.value })}
+            >
               <option>OAuth 2.0</option><option>API Key</option><option>JWT Bearer</option>
             </select>
-            <select className={`${INPUT_CLS} appearance-none`}>
+            <select
+              className={`${INPUT_CLS} appearance-none`}
+              value={form.apiFrequency || 'Hourly'}
+              onChange={e => setForm({ ...form, apiFrequency: e.target.value })}
+            >
               <option>Hourly</option><option>Every 6 hrs</option><option>Daily</option><option>Weekly</option>
             </select>
           </div>
@@ -611,8 +623,8 @@ function Step3({ form, setForm }: { form: any; setForm: any }) {
           {retentionOptions.map(opt => (
             <button
               key={opt}
-              onClick={() => setRetention(opt)}
-              className={`px-3.5 py-[7px] rounded-lg text-[13px] font-medium cursor-pointer border ${retention === opt ? 'bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'bg-white text-[#64748B] border-[#E2E8F0]'}`}
+              onClick={() => setForm({ ...form, retention: opt })}
+              className={`px-3.5 py-[7px] rounded-lg text-[13px] font-medium cursor-pointer border ${(form.retention || '90 days') === opt ? 'bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'bg-white text-[#64748B] border-[#E2E8F0]'}`}
             >
               {opt}
             </button>
@@ -627,9 +639,9 @@ function Step3({ form, setForm }: { form: any; setForm: any }) {
    Step 4 -- Trigger Config
    ================================================================ */
 function Step4({ form, setForm }: { form: any; setForm: any }) {
-  const [triggerMode, setTriggerMode] = useState('scheduled');
-  const [cronExpr, setCronExpr] = useState('0 0 * * *');
-  const [activePreset, setActivePreset] = useState('Daily');
+  const triggerMode = form.triggerMode || 'scheduled';
+  const cronExpr = form.cronExpr || '0 0 * * *';
+  const activePreset = form.cronPreset || 'Daily';
   return (
     <div>
       <div className="mb-5">
@@ -638,7 +650,7 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
           {triggerModes.map(m => (
             <div
               key={m.id}
-              onClick={() => setTriggerMode(m.id)}
+              onClick={() => setForm({ ...form, triggerMode: m.id })}
               className={`p-4 rounded-[10px] cursor-pointer text-center ${triggerMode === m.id ? 'border-2 border-[#0EA5E9] bg-[#EFF6FF]' : 'border border-[#E2E8F0] bg-white'}`}
             >
               <div className="text-sm font-semibold text-slate-900">{m.title}</div>
@@ -656,7 +668,7 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
               <input
                 className={`${INPUT_CLS} font-mono max-w-[200px]`}
                 value={cronExpr}
-                onChange={e => setCronExpr(e.target.value)}
+                onChange={e => setForm({ ...form, cronExpr: e.target.value })}
               />
               <span className="text-[13px] text-slate-500">Every day at midnight UTC</span>
             </div>
@@ -667,7 +679,7 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
               {cronPresets.map(p => (
                 <button
                   key={p}
-                  onClick={() => setActivePreset(p)}
+                  onClick={() => setForm({ ...form, cronPreset: p })}
                   className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer border ${activePreset === p ? 'bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'bg-white text-[#64748B] border-[#E2E8F0]'}`}
                 >
                   {p}
@@ -678,11 +690,21 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">First Evaluation Date</label>
-              <input type="date" className={INPUT_CLS} />
+              <input
+                type="date"
+                className={INPUT_CLS}
+                value={form.firstEvalDate || ''}
+                onChange={e => setForm({ ...form, firstEvalDate: e.target.value })}
+              />
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Time</label>
-              <input type="time" className={INPUT_CLS} />
+              <input
+                type="time"
+                className={INPUT_CLS}
+                value={form.firstEvalTime || ''}
+                onChange={e => setForm({ ...form, firstEvalTime: e.target.value })}
+              />
             </div>
           </div>
         </div>
@@ -696,7 +718,7 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
               <input
                 readOnly
                 className={`${INPUT_CLS} bg-[#F8FAFC] flex-1`}
-                value="https://tprm.example.com/webhook/ctrl-xxxx"
+                value={form.webhookUrl || 'https://tprm.example.com/webhook/ctrl-xxxx'}
               />
               <button className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer text-xs text-slate-500">
                 Copy
@@ -705,7 +727,12 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
           </div>
           <div className="mb-5">
             <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Event Filter</label>
-            <input className={INPUT_CLS} placeholder="e.g., incident.created" />
+            <input
+              className={INPUT_CLS}
+              placeholder="e.g., incident.created"
+              value={form.eventFilter || ''}
+              onChange={e => setForm({ ...form, eventFilter: e.target.value })}
+            />
           </div>
         </div>
       )}
@@ -717,21 +744,22 @@ function Step4({ form, setForm }: { form: any; setForm: any }) {
    Step 5 -- AI Behaviour
    ================================================================ */
 function Step5({ form, setForm }: { form: any; setForm: any }) {
-  const [actions, setActions] = useState(new Set(autoActions.filter(a => a.default).map(a => a.id)));
-  const [confidence, setConfidence] = useState(75);
-  const [storeEvidence, setStoreEvidence] = useState(true);
-  const [humanReview, setHumanReview] = useState(false);
-  const [truthGap, setTruthGap] = useState(false);
-  const [selectedAnomalies, setSelectedAnomalies] = useState<Set<string>>(new Set());
+  const actions = new Set(form.autoActions || []);
+  const confidence = form.confidenceThreshold ?? 75;
+  const storeEvidence = form.storeEvidence ?? true;
+  const humanReview = form.humanReview ?? false;
+  const truthGap = form.truthGap ?? false;
+  const selectedAnomalies = new Set(form.selectedAnomalies || []);
+
   const toggleAction = (id: string) => {
-    const n = new Set(actions);
+    const n = new Set(form.autoActions || []);
     n.has(id) ? n.delete(id) : n.add(id);
-    setActions(n);
+    setForm({ ...form, autoActions: Array.from(n) });
   };
   const toggleAnomaly = (id: string) => {
-    const n = new Set(selectedAnomalies);
+    const n = new Set(form.selectedAnomalies || []);
     n.has(id) ? n.delete(id) : n.add(id);
-    setSelectedAnomalies(n);
+    setForm({ ...form, selectedAnomalies: Array.from(n) });
   };
 
   return (
@@ -743,6 +771,8 @@ function Step5({ form, setForm }: { form: any; setForm: any }) {
           className={`${INPUT_CLS} resize-y`}
           placeholder="Describe in natural language how the AI should evaluate this control..."
           maxLength={500}
+          value={form.evaluationInstructions || ''}
+          onChange={e => setForm({ ...form, evaluationInstructions: e.target.value })}
         />
         <div className="text-[11px] text-slate-400 mt-1">Max 500 characters</div>
       </div>
@@ -785,7 +815,14 @@ function Step5({ form, setForm }: { form: any; setForm: any }) {
       <div className="mb-5">
         <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Confidence Threshold</label>
         <div className="flex items-center gap-4">
-          <input type="range" min={0} max={100} value={confidence} onChange={e => setConfidence(Number(e.target.value))} className="flex-1" />
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={confidence}
+            onChange={e => setForm({ ...form, confidenceThreshold: Number(e.target.value) })}
+            className="flex-1"
+          />
           <span className="text-sm font-bold text-white bg-sky-500 px-2.5 py-[3px] rounded-md">{confidence}%</span>
         </div>
         <div className="text-xs text-slate-500 mt-1">Below this threshold, AI will flag for human review instead of auto-deciding.</div>
@@ -810,16 +847,22 @@ function Step5({ form, setForm }: { form: any; setForm: any }) {
 
       <div className="mb-5">
         <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Remediation Suggestion</label>
-        <textarea rows={3} className={`${INPUT_CLS} resize-y`} placeholder="What should the agent recommend when this control fails?" />
+        <textarea
+          rows={3}
+          className={`${INPUT_CLS} resize-y`}
+          placeholder="What should the agent recommend when this control fails?"
+          value={form.remediationSuggestion || ''}
+          onChange={e => setForm({ ...form, remediationSuggestion: e.target.value })}
+        />
       </div>
 
       <div className="flex flex-col gap-3.5">
         <div className="flex items-center gap-3">
-          <InlineToggle on={storeEvidence} onChange={() => setStoreEvidence(!storeEvidence)} />
+          <InlineToggle on={storeEvidence} onChange={() => setForm({ ...form, storeEvidence: !storeEvidence })} />
           <span className="text-sm text-slate-700">Store evidence snapshots for each evaluation</span>
         </div>
         <div className="flex items-center gap-3">
-          <InlineToggle on={humanReview} onChange={() => setHumanReview(!humanReview)} />
+          <InlineToggle on={humanReview} onChange={() => setForm({ ...form, humanReview: !humanReview })} />
           <span className="text-sm text-slate-700">Require human approval before marking as compliant</span>
         </div>
 
@@ -828,7 +871,7 @@ function Step5({ form, setForm }: { form: any; setForm: any }) {
           className={`mt-1 rounded-[10px] px-4 py-3 transition-all duration-200 border ${truthGap ? 'border-[#FECACA] bg-[#FEF2F2]' : 'border-[#E2E8F0] bg-[#F8FAFC]'}`}
         >
           <div className={`flex items-start gap-3 ${truthGap ? 'mb-[10px]' : ''}`}>
-            <InlineToggle on={truthGap} onChange={() => setTruthGap(!truthGap)} />
+            <InlineToggle on={truthGap} onChange={() => setForm({ ...form, truthGap: !truthGap })} />
             <div>
               <div className="flex items-center gap-1.5 mb-0.5">
                 <AlertTriangle size={14} color={truthGap ? '#EF4444' : '#94A3B8'} />
@@ -867,30 +910,31 @@ function Step5({ form, setForm }: { form: any; setForm: any }) {
    Step 6 -- Dependencies
    ================================================================ */
 function Step6({ form, setForm }: { form: any; setForm: any }) {
-  const [dependsOn, setDependsOn] = useState([
-    { id: 'mfa', label: 'MFA Enforcement', type: 'Blocking' },
-    { id: 'enc', label: 'Encryption at Rest', type: 'Warning' },
-  ]);
-  const [cascade, setCascade] = useState(false);
+  const dependsOn = form.dependencies || [];
+  const cascade = form.cascadeOnFail ?? false;
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const removeDep = (id: string) => setDependsOn(prev => prev.filter(d => d.id !== id));
+  const removeDep = (id: string) => setForm({ ...form, dependencies: dependsOn.filter((d: any) => d.id !== id) });
   const toggleType = (id: string) =>
-    setDependsOn(prev =>
-      prev.map(d =>
+    setForm({
+      ...form,
+      dependencies: dependsOn.map((d: any) =>
         d.id === id ? { ...d, type: d.type === 'Blocking' ? 'Warning' : 'Blocking' } : d,
       ),
-    );
+    });
   const addDep = (label: string) => {
-    if (dependsOn.find(d => d.label === label)) return;
-    setDependsOn(prev => [
-      ...prev,
-      { id: label.toLowerCase().replace(/\s/g, '_'), label, type: 'Warning' },
-    ]);
+    if (dependsOn.find((d: any) => d.label === label)) return;
+    setForm({
+      ...form,
+      dependencies: [
+        ...dependsOn,
+        { id: label.toLowerCase().replace(/\s/g, '_'), label, type: 'Warning' },
+      ],
+    });
     setDropdownOpen(false);
   };
 
-  const alreadyAdded = new Set(dependsOn.map(d => d.label));
+  const alreadyAdded = new Set(dependsOn.map((d: any) => d.label));
 
   return (
     <div>
@@ -967,7 +1011,7 @@ function Step6({ form, setForm }: { form: any; setForm: any }) {
 
       <div className="flex items-center gap-3 mb-5">
         <div
-          onClick={() => setCascade(!cascade)}
+          onClick={() => setForm({ ...form, cascadeOnFail: !cascade })}
           className={`relative cursor-pointer w-10 h-[22px] rounded-full ${cascade ? 'bg-[#0EA5E9]' : 'bg-[#CBD5E1]'}`}
         >
           <div
@@ -1039,16 +1083,56 @@ function Step6({ form, setForm }: { form: any; setForm: any }) {
    Review Screen
    ================================================================ */
 function ReviewScreen({ form, onActivate }: { form: any; onActivate: () => void }) {
+  // Calculate total assets from selected categories
+  const assetCounts: Record<string, number> = {
+    azure: 312, gcp: 185, m365: 156, ad: 89, snow: 67, splunk: 38, suppliers: 48
+  };
+  const totalAssets = (form.selectedAssets || []).reduce((sum: number, id: string) => sum + (assetCounts[id] || 0), 0);
+
+  // Format data sources
+  const sourceLabels: Record<string, string> = {
+    api: 'API Integration', siem: 'Logs/SIEM', ticket: 'Ticketing', docs: 'Documents', task: 'Task Output', portal: 'Supplier Portal', email: 'Email'
+  };
+  const formattedSources = (form.dataSources || []).map((id: string) => sourceLabels[id] || id).join(', ') || 'None selected';
+
+  // Format trigger info
+  const triggerModeLabels: Record<string, string> = { manual: 'Manual', scheduled: 'Scheduled', event: 'Event-Driven' };
+  const triggerLabel = triggerModeLabels[form.triggerMode] || 'Scheduled';
+  const scheduleLabel = form.triggerMode === 'scheduled' ? `${form.cronPreset || 'Daily'} at midnight UTC` : 'N/A';
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-4">
         {[
-          { title: 'Basic Info', items: [['Name', form.name || 'MFA Enforcement Policy'], ['Classification', form.classification || 'Technical'], ['Risk', form.risk || 'High']] },
-          { title: 'Asset Scope', items: [['Scope Mode', 'Full Scope'], ['Total Assets', '847']] },
-          { title: 'Data Source', items: [['Sources', 'API Integration, Ticketing'], ['Retention', '90 days']] },
-          { title: 'Trigger Config', items: [['Mode', 'Scheduled'], ['Schedule', 'Daily at midnight UTC']] },
-          { title: 'AI Behaviour', items: [['Confidence Threshold', '75%'], ['Evidence', 'Enabled']] },
-          { title: 'Dependencies', items: [['Depends On', '2 controls'], ['Failure Cascade', 'Off']] },
+          { title: 'Basic Info', items: [
+            ['Name', form.name || '(not set)'],
+            ['Classification', form.classification || '(not set)'],
+            ['Risk', form.risk || 'High'],
+            ['Personality', form.personality ? form.personality.charAt(0).toUpperCase() + form.personality.slice(1) : 'Operations']
+          ]},
+          { title: 'Asset Scope', items: [
+            ['Scope Mode', form.scopeMode === 'full' ? 'Full Scope' : 'Specific Assets'],
+            ['Total Assets', form.scopeMode === 'specific' ? (form.assetCount || '0') : String(totalAssets)],
+            ['Categories', `${(form.selectedAssets || []).length} selected`]
+          ]},
+          { title: 'Data Source', items: [
+            ['Sources', formattedSources],
+            ['Retention', form.retention || '90 days']
+          ]},
+          { title: 'Trigger Config', items: [
+            ['Mode', triggerLabel],
+            ['Schedule', scheduleLabel]
+          ]},
+          { title: 'AI Behaviour', items: [
+            ['Confidence Threshold', `${form.confidenceThreshold ?? 75}%`],
+            ['Evidence', form.storeEvidence !== false ? 'Enabled' : 'Disabled'],
+            ['Truth Gap', form.truthGap ? 'Enabled' : 'Disabled'],
+            ['Anomalies', `${(form.selectedAnomalies || []).length} selected`]
+          ]},
+          { title: 'Dependencies', items: [
+            ['Depends On', `${(form.dependencies || []).length} controls`],
+            ['Failure Cascade', form.cascadeOnFail ? 'On' : 'Off']
+          ]},
         ].map(section => (
           <div key={section.title} className="bg-white border border-slate-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4">
             <div className="text-[13px] font-bold text-slate-900 mb-2.5">{section.title}</div>
@@ -1062,7 +1146,7 @@ function ReviewScreen({ form, onActivate }: { form: any; onActivate: () => void 
         ))}
       </div>
       <div className="bg-emerald-50 border border-emerald-200 rounded-[10px] px-5 py-3.5 text-sm text-emerald-900 font-medium">
-        Estimated Coverage: <strong>847 assets</strong> will be monitored by this control
+        Estimated Coverage: <strong>{form.scopeMode === 'specific' ? (form.assetCount || 0) : totalAssets} assets</strong> will be monitored by this control
       </div>
       <div className="flex justify-end gap-3">
         <GhostBtn>Save as Draft</GhostBtn>
@@ -1105,13 +1189,49 @@ export function CreateControlPage() {
   const [isActivating, setIsActivating] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [form, setForm] = useState({
+    // Step 1 - Basic Info
     name: '',
     description: '',
     source: 'local',
     classification: '',
     risk: 'High',
     tags: '',
+    personality: '' as string,
+    selectedChecks: [] as string[],
+    grcProvider: '' as string,
+    // Step 2 - Asset Scope
     scopeMode: 'full',
+    assetCount: '' as string,
+    selectedAssets: ['azure', 'gcp', 'm365', 'ad', 'suppliers'] as string[],
+    // Step 3 - Data Source
+    dataSources: ['api', 'ticket'] as string[],
+    retention: '90 days',
+    apiEndpoint: '',
+    apiAuth: 'OAuth 2.0',
+    apiFrequency: 'Hourly',
+    // Step 4 - Trigger Config
+    triggerMode: 'scheduled',
+    cronExpr: '0 0 * * *',
+    cronPreset: 'Daily',
+    firstEvalDate: '',
+    firstEvalTime: '',
+    webhookUrl: 'https://tprm.example.com/webhook/ctrl-xxxx',
+    eventFilter: '',
+    // Step 5 - AI Behaviour
+    evaluationInstructions: '',
+    selectedAnomalies: [] as string[],
+    confidenceThreshold: 75,
+    autoActions: ['ticket', 'email', 'review'] as string[],
+    remediationSuggestion: '',
+    storeEvidence: true,
+    humanReview: false,
+    truthGap: false,
+    // Step 6 - Dependencies
+    dependencies: [
+      { id: 'mfa', label: 'MFA Enforcement', type: 'Blocking' },
+      { id: 'enc', label: 'Encryption at Rest', type: 'Warning' },
+    ] as Array<{ id: string; label: string; type: string }>,
+    cascadeOnFail: false,
   });
 
   const canNext = form.name.trim().length > 0 && form.classification.length > 0;
@@ -1126,17 +1246,17 @@ export function CreateControlPage() {
         category: form.classification as Control['category'],
         active: true, // New controls start active
         coverage: 0, // Will be calculated by backend
-        scope: form.scopeMode === 'full' ? 'Full' : form.scopeMode === 'partial' ? 'Partial' : 'Sparse',
+        scope: form.scopeMode === 'full' ? 'Full' : form.scopeMode === 'specific' ? 'Partial' : 'Sparse',
         risk: form.risk as Control['risk'],
         lastEval: 'Just created',
-        deps: 0, // Will be calculated by backend
-        // Optional fields that would come from other steps
-        internalSpoc: undefined, // Could be set from form if added
-        externalSpoc: undefined, // Could be set from form if added
-        piiFlow: undefined, // Could be set from step 3 if implemented
-        truthValidator: false, // Could be set from step 5 if implemented
-        hasTruthGap: false,
-        personality: 'Operations' as Control['personality'], // Default or from form
+        deps: (form.dependencies || []).length,
+        // Optional fields from wizard steps
+        internalSpoc: undefined,
+        externalSpoc: undefined,
+        piiFlow: undefined,
+        truthValidator: form.humanReview ?? false,
+        hasTruthGap: form.truthGap ?? false,
+        personality: (form.personality || 'operations') as Control['personality'],
       };
 
       const newControl = await createControl(controlData);
@@ -1172,13 +1292,49 @@ export function CreateControlPage() {
               setIsSuccess(false);
               setStep(1);
               setForm({
+                // Step 1 - Basic Info
                 name: '',
                 description: '',
                 source: 'local',
                 classification: '',
                 risk: 'High',
                 tags: '',
+                personality: '',
+                selectedChecks: [],
+                grcProvider: '',
+                // Step 2 - Asset Scope
                 scopeMode: 'full',
+                assetCount: '',
+                selectedAssets: ['azure', 'gcp', 'm365', 'ad', 'suppliers'],
+                // Step 3 - Data Source
+                dataSources: ['api', 'ticket'],
+                retention: '90 days',
+                apiEndpoint: '',
+                apiAuth: 'OAuth 2.0',
+                apiFrequency: 'Hourly',
+                // Step 4 - Trigger Config
+                triggerMode: 'scheduled',
+                cronExpr: '0 0 * * *',
+                cronPreset: 'Daily',
+                firstEvalDate: '',
+                firstEvalTime: '',
+                webhookUrl: 'https://tprm.example.com/webhook/ctrl-xxxx',
+                eventFilter: '',
+                // Step 5 - AI Behaviour
+                evaluationInstructions: '',
+                selectedAnomalies: [],
+                confidenceThreshold: 75,
+                autoActions: ['ticket', 'email', 'review'],
+                remediationSuggestion: '',
+                storeEvidence: true,
+                humanReview: false,
+                truthGap: false,
+                // Step 6 - Dependencies
+                dependencies: [
+                  { id: 'mfa', label: 'MFA Enforcement', type: 'Blocking' },
+                  { id: 'enc', label: 'Encryption at Rest', type: 'Warning' },
+                ],
+                cascadeOnFail: false,
               });
             }}
           />

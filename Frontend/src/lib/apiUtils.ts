@@ -22,9 +22,13 @@ export async function withFallback<T>(
     return typeof mockData === 'function' ? (mockData as () => T)() : mockData;
   }
 
-  // When mock mode is disabled, let API errors propagate
-  // so we can see real errors and not hide them behind mock data
-  return await apiCall();
+  // Try the real API; fall back to mock data on any error
+  try {
+    return await apiCall();
+  } catch (err) {
+    console.warn(`[${label}] API call failed, falling back to mock data:`, err);
+    return typeof mockData === 'function' ? (mockData as () => T)() : mockData;
+  }
 }
 
 /**

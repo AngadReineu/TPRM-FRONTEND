@@ -6,7 +6,7 @@ import {
   AlertCircle, Clock, AlertTriangle, Eye, Cpu, XCircle, ShieldCheck, Handshake, Truck,
   Activity, Zap, Shield, ChevronDown, ChevronUp,
   Brain, ChevronRight, Users, BarChart2, Bell,
-  FileText, Flag, GitMerge, Loader2,
+  FileText, Flag, GitMerge, Loader2, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,7 +26,10 @@ import {
   getAgentLogs,
   createAgent,
   updateAgent,
+  deleteAgent,
 } from '../services/agents.data';
+import { getControls } from '../../controls/services/controls.data';
+import { getVendors } from '../../vendors/services/vendors.data';
 
 import { AgentAvatar } from '../components/AgentAvatar';
 import { LogRow } from '../components/LogRow';
@@ -171,6 +174,47 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [controlTab, setControlTab] = useState<'process' | 'technical' | 'document'>('process');
   const [internalContacts, setInternalContacts] = useState<string[]>(['']);
   const [supplierContacts, setSupplierContacts] = useState<string[]>(['']);
+
+  // Fetch real controls and vendors from API
+  const [availableControls, setAvailableControls] = useState<{process: string[], technical: string[], document: string[]}>({
+    process: PROCESS_CONTROLS,
+    technical: TECHNICAL_CONTROLS,
+    document: DOCUMENT_CONTROLS,
+  });
+  const [availableSuppliers, setAvailableSuppliers] = useState<string[]>(SUPPLIERS_LIST);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  // Fetch controls and vendors on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const [controlsData, vendorsData] = await Promise.all([
+          getControls(),
+          getVendors(),
+        ]);
+
+        // Group controls by category
+        const processControls = controlsData.filter(c => c.category === 'Process').map(c => c.name);
+        const technicalControls = controlsData.filter(c => c.category === 'Technical').map(c => c.name);
+        const documentControls = controlsData.filter(c => c.category === 'Document').map(c => c.name);
+
+        setAvailableControls({
+          process: processControls.length > 0 ? processControls : PROCESS_CONTROLS,
+          technical: technicalControls.length > 0 ? technicalControls : TECHNICAL_CONTROLS,
+          document: documentControls.length > 0 ? documentControls : DOCUMENT_CONTROLS,
+        });
+
+        // Extract vendor names
+        const vendorNames = vendorsData.map(v => v.name);
+        setAvailableSuppliers(vendorNames.length > 0 ? vendorNames : SUPPLIERS_LIST);
+      } catch (err) {
+        console.error('Failed to load controls/vendors:', err);
+        // Keep using fallback data from constants
+      } finally {
+        setDataLoading(false);
+      }
+    })();
+  }, []);
 
   const initials = name.trim() ? name.trim().slice(0, 2).toUpperCase() : 'A?';
   const toggleStage  = (s: Stage) => { const n = new Set(stages); n.has(s) ? n.delete(s) : n.add(s); setStages(n); };
@@ -406,7 +450,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   ))}
                 </div>
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  {(controlTab === 'process' ? PROCESS_CONTROLS : controlTab === 'technical' ? TECHNICAL_CONTROLS : DOCUMENT_CONTROLS).map((ctrl, i, arr) => {
+                  {(controlTab === 'process' ? availableControls.process : controlTab === 'technical' ? availableControls.technical : availableControls.document).map((ctrl, i, arr) => {
                     const sel = controls.has(ctrl);
                     const tabColor = controlTab === 'process' ? '#10B981' : controlTab === 'technical' ? '#0EA5E9' : '#8B5CF6';
                     const tabBg    = controlTab === 'process' ? '#ECFDF5' : controlTab === 'technical' ? '#EFF6FF' : '#F5F3FF';
@@ -437,8 +481,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 {controls.size > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {Array.from(controls).map((c) => {
-                      const isDoc  = DOCUMENT_CONTROLS.includes(c);
-                      const isProc = PROCESS_CONTROLS.includes(c);
+                      const isDoc  = availableControls.document.includes(c);
+                      const isProc = availableControls.process.includes(c);
                       const chipClr = isDoc ? '#8B5CF6' : isProc ? '#10B981' : '#0EA5E9';
                       const chipBg  = isDoc ? '#F5F3FF' : isProc ? '#ECFDF5' : '#EFF6FF';
                       return (
@@ -457,7 +501,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
               {/* Suppliers */}
               <div>
                 <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Assign Suppliers</label>
-                <MultiSelect label="Suppliers" options={SUPPLIERS_LIST} selected={suppliers} onToggle={toggleSup} chipColor={['#F5F3FF', '#8B5CF6']} />
+                <MultiSelect label="Suppliers" options={availableSuppliers} selected={suppliers} onToggle={toggleSup} chipColor={['#F5F3FF', '#8B5CF6']} />
               </div>
 
               {/* Stages */}
@@ -539,7 +583,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 className={`px-5 py-2 text-sm font-semibold border-none rounded-lg text-white cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed ${name.trim() ? 'bg-[#0EA5E9]' : 'bg-[#CBD5E1]'}`}
               >
                 {loading && <RefreshCw size={14} className="animate-spin" />}
-                {loading ? 'Creating...' : 'Create Agent \u2192'}
+                {loading ? 'Creating...' : 'Create Agent'}
               </button>
             </div>
           </div>
@@ -1092,6 +1136,21 @@ export function AgentsPage() {
     }
   };
 
+  const handleDeleteAgent = async (agent: Agent, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening detail view
+    if (!window.confirm(`Are you sure you want to delete "${agent.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteAgent(agent.id);
+      setAgents((prev) => prev.filter((a) => a.id !== agent.id));
+      toast.success(`${agent.name} deleted successfully`);
+    } catch (err) {
+      console.error('Failed to delete agent:', err);
+      toast.error('Failed to delete agent. Please try again.');
+    }
+  };
+
   /* Detail view */
   if (view === 'detail' && selectedAgent) {
     return (
@@ -1206,8 +1265,16 @@ export function AgentsPage() {
             <div
               key={agent.id}
               onClick={() => { setSelectedAgent(agent); setView('detail'); }}
-              className="bg-white border border-slate-200 rounded-2xl p-5 cursor-pointer text-center transition-all hover:shadow-md hover:border-sky-500"
+              className="bg-white border border-slate-200 rounded-2xl p-5 cursor-pointer text-center transition-all hover:shadow-md hover:border-sky-500 relative group"
             >
+              {/* Delete button */}
+              <button
+                onClick={(e) => handleDeleteAgent(agent, e)}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500"
+                title="Delete agent"
+              >
+                <Trash2 size={14} />
+              </button>
               <div className="flex justify-center mb-3 relative">
                 <div className="relative">
                   <img src={avatarUrl} alt={agent.name} width={72} height={72} className="rounded-full block bg-slate-100" style={{ border: `3px solid ${STATUS_CLR[agent.status]}55` }} />
