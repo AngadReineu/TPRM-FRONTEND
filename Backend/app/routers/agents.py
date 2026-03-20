@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional
 import uuid
+import subprocess
+import os
+from datetime import datetime
 
 from ..database import get_db
 from ..models.agent import Agent, AgentTask, AgentLog, AgentTimeline
@@ -167,6 +171,61 @@ def get_agent_logs(
         .order_by(AgentLog.created_at.asc())
         .all()
     )
+
+
+class AgentLogCreate(BaseModel):
+    type: str
+    message: str
+    detail: Optional[str] = None
+
+@router.post("/{agent_id}/logs", response_model=AgentLogResponse, status_code=status.HTTP_201_CREATED)
+def create_agent_log(
+    agent_id: str,
+    payload: AgentLogCreate,
+    db: Session = Depends(get_db)
+):
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    current_time = datetime.now().strftime("%H:%M:%S")
+    log = AgentLog(
+        id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        view="detail",
+        time=current_time,
+        type=payload.type,
+        message=payload.message,
+        detail=payload.detail,
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log
+
+@router.get("/{agent_id}/report")
+def get_agent_report(agent_id: str):
+    report_path = r"C:\Users\Angad\Downloads\gmail_po_report.txt"
+    if not os.path.exists(report_path):
+        raise HTTPException(status_code=404, detail="Report not generated yet.")
+    with open(report_path, "r", encoding="utf-8") as f:
+        return {"report": f.read()}
+
+@router.post("/{agent_id}/run")
+def run_agent(agent_id: str, db: Session = Depends(get_db)):
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+        
+    script_path = r"C:\Users\Angad\OneDrive\Desktop\chatbot\gmail_po_agent.py"
+    if not os.path.exists(script_path):
+        raise HTTPException(status_code=500, detail="Agent script not found")
+        
+    # Launch script in background
+    import sys
+    subprocess.Popen([sys.executable, script_path, agent_id])
+    
+    return {"status": "started", "agent_id": agent_id}
 
 
 # ── SSE live log stream — replaces useAgentLogStream hook ──

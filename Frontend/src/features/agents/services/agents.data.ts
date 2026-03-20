@@ -739,3 +739,15 @@ export async function updateAgent(id: string, input: AgentUpdateInput): Promise<
 export async function deleteAgent(id: string): Promise<void> {
   await api.delete(`/agents/${id}`);
 }
+
+/**
+ * Trigger an agent to run manually via API.
+ */
+export async function runAgent(id: string): Promise<{status: string; agentId: string}> {
+  const response = await api.post<unknown>(`/agents/${id}/run`);
+  return toCamelCase<{status: string; agentId: string}>(response);
+}
+
+export async function getAgentReport(id: string): Promise<{report: string}> {
+  return await api.get<{report: string}>(`/agents/${id}/report`);
+}

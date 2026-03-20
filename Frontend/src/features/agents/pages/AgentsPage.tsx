@@ -6,7 +6,7 @@ import {
   AlertCircle, Clock, AlertTriangle, Eye, Cpu, XCircle, ShieldCheck, Handshake, Truck,
   Activity, Zap, Shield, ChevronDown, ChevronUp,
   Brain, ChevronRight, Users, BarChart2, Bell,
-  FileText, Flag, GitMerge, Loader2, Trash2,
+  FileText, Flag, GitMerge, Loader2, Trash2, Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -27,6 +27,8 @@ import {
   createAgent,
   updateAgent,
   deleteAgent,
+  runAgent,
+  getAgentReport,
 } from '../services/agents.data';
 import { getControls } from '../../controls/services/controls.data';
 import { getVendors } from '../../vendors/services/vendors.data';
@@ -638,6 +640,11 @@ function AgentDetailView({
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [initialLogs, setInitialLogs] = useState<LogEntry[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isAgentRunning, setIsAgentRunning] = useState(false);
+  const [forceDisconnect, setForceDisconnect] = useState(false);
+  
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportContent, setReportContent] = useState<string | null>(null);
 
   // Fetch tasks, timeline, and logs
   useEffect(() => {
@@ -672,10 +679,35 @@ function AgentDetailView({
   const { logs, pulse } = useAgentLogStream({
     agentId: agent.id,
     view: 'list',
-    initialLogs: initialLogs.length > 0 ? initialLogs : getInitialLogsList(agent.id),
-    streamQueue: getStreamQueueList(agent.id),
-    isActive,
+    initialLogs: initialLogs,
+    streamQueue: [],
+    isActive: isActive && !forceDisconnect,
   });
+
+  const handleRunAgent = async () => {
+    try {
+      setIsAgentRunning(true);
+      setForceDisconnect(true);
+      setTimeout(() => setForceDisconnect(false), 100);
+      await runAgent(agent.id);
+      toast.success('Agent started successfully');
+    } catch (err) {
+      console.error('Failed to run agent:', err);
+      toast.error('Failed to run agent');
+    } finally {
+      setIsAgentRunning(false);
+    }
+  };
+
+  const handleViewReport = async () => {
+    try {
+      const data = await getAgentReport(agent.id);
+      setReportContent(data.report);
+      setShowReportModal(true);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to fetch report');
+    }
+  };
 
   const [taskFilter, setTaskFilter]         = useState<TaskStatus | 'All'>('All');
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
@@ -700,15 +732,34 @@ function AgentDetailView({
   return (
     <div className="flex flex-col min-h-full">
       {/* Top nav */}
-      <div className="bg-white border-b border-slate-200 flex items-center gap-3 shrink-0 py-3.5 px-6">
-        <button onClick={onBack} className="flex items-center gap-1 bg-transparent border-none cursor-pointer text-slate-500 text-sm rounded-lg px-2.5 py-1.5">
-          <ChevronLeft size={18} /> Back to Agents
-        </button>
-        <span className="text-slate-200">|</span>
-        <div className="text-lg font-bold text-slate-900">{agent.name}</div>
-        <span className="text-xs font-semibold rounded-full px-2.5 py-0.5" style={{ backgroundColor: STATUS_CLR[agent.status] + '22', color: STATUS_CLR[agent.status] }}>
-          {STATUS_LABEL[agent.status]}
-        </span>
+      <div className="bg-white border-b border-slate-200 flex items-center justify-between shrink-0 py-3.5 px-6">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1 bg-transparent border-none cursor-pointer text-slate-500 text-sm rounded-lg px-2.5 py-1.5 hover:bg-slate-50">
+            <ChevronLeft size={18} /> Back to Agents
+          </button>
+          <span className="text-slate-200">|</span>
+          <div className="text-lg font-bold text-slate-900">{agent.name}</div>
+          <span className="text-xs font-semibold rounded-full px-2.5 py-0.5" style={{ backgroundColor: STATUS_CLR[agent.status] + '22', color: STATUS_CLR[agent.status] }}>
+            {STATUS_LABEL[agent.status]}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleViewReport}
+            className="flex items-center gap-2 bg-slate-100 text-slate-700 border-none rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer hover:bg-slate-200"
+          >
+            <FileText size={16} />
+            View Report
+          </button>
+          <button
+            onClick={handleRunAgent}
+            disabled={isAgentRunning}
+            className="flex items-center gap-2 bg-[#10B981] text-white border-none rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAgentRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            Run Agent
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
@@ -972,30 +1023,19 @@ function AgentDetailView({
                   <span className="text-xs text-emerald-500">Live</span>
                 </div>
               </div>
-              {(agent.id === 'a1' ? [
-                { time: '2 min ago',  action: 'SOW Verification',          trigger: 'XYZ Corporation',  reasoning: `Cross-referenced SOW signature date (Feb 10) against service start date (Feb 5) from ${agent.internalSPOC} emails. SOW signed after service began \u2014 Contractual Risk flagged.`, confidence: '91%', outcome: 'alert' },
-                { time: '15 min ago', action: 'Invoice Approval Check',    trigger: 'XYZ Corporation',  reasoning: `Payment of \u20B910L detected in bank feed. No corresponding PO approval found in email chain between ${agent.internalSPOC} and ${agent.externalSPOC}. Anomaly: Unapproved Payment.`, confidence: '88%', outcome: 'alert' },
-                { time: '40 min ago', action: 'Contractual Obligation Review', trigger: 'GHI Technologies', reasoning: 'Reviewed active obligations in contract. 2 of 5 deliverables overdue by 12+ days. SLA breach threshold crossed. Escalation email sent to Risk Manager.', confidence: '96%', outcome: 'warn' },
-                { time: '1 hr ago',   action: 'ISO 27001 Cert Expiry',     trigger: 'XYZ Corporation',  reasoning: 'Pulled certificate expiry date from document store. ISO 27001 cert expires in 22 days. Auto-renewal reminder dispatched to supplier contact.', confidence: '97%', outcome: 'warn' },
-                { time: '3 hrs ago',  action: 'Supplier Onboarding Check', trigger: 'GHI Technologies', reasoning: 'Onboarding checklist reviewed. Items 4 (DPA signed) and 7 (BCP submitted) not completed. Checklist 71% complete. Flagged for follow-up.', confidence: '85%', outcome: 'warn' },
-                { time: '5 hrs ago',  action: 'Third-Party Risk Assessment', trigger: 'XYZ Corporation', reasoning: 'Annual TPRA due date passed 8 days ago. No updated risk assessment received. Reminder escalated to Compliance Officer.', confidence: '99%', outcome: 'alert' },
-              ] : agent.id === 'a2' ? [
-                { time: '8 min ago',  action: 'SLA Adherence Check',       trigger: 'ABC Services Ltd', reasoning: 'SLA report for Feb 2026 reviewed. Uptime reported at 98.1% vs contracted 99.5%. Breach of 1.4%. Penalty clause applicable. Ticket raised.', confidence: '97%', outcome: 'alert' },
-                { time: '30 min ago', action: 'Invoice Approval Workflow',  trigger: 'MNO Partners',     reasoning: 'Invoice INV-20260228 (\u20B94.2L) submitted. Verified PO approval in email thread. Finance sign-off confirmed. Workflow complete, no anomalies.', confidence: '99%', outcome: 'check' },
-                { time: '1 hr ago',   action: 'DPA Compliance Check',      trigger: 'JKL Consultancy',  reasoning: 'Data Processing Agreement reviewed. Article 28 obligations assessed. DPA signed Jan 2026 but missing sub-processor annex. 1 issue flagged for legal.', confidence: '90%', outcome: 'warn' },
-                { time: '2 hrs ago',  action: 'Access Revocation on Exit', trigger: 'ABC Services Ltd', reasoning: 'Cross-checked HR offboarding log against supplier contact list. 1 contact (mark@abc-services.com) departed Feb 15 \u2014 access not yet revoked. Action triggered.', confidence: '94%', outcome: 'alert' },
-                { time: '4 hrs ago',  action: 'Supplier Onboarding Review', trigger: 'MNO Partners',    reasoning: 'Onboarding checklist for MNO Partners at 60% completion. Missing: BCP document and proof of cyber insurance. Automated reminder sent.', confidence: '88%', outcome: 'warn' },
-              ] : [
-                { time: 'just now', action: 'Network Check', trigger: 'DEF Limited', reasoning: 'Network segmentation control evaluated. DMZ configuration missing. Control marked Failed.', confidence: '92%', outcome: 'alert' },
-                { time: '20 min ago', action: 'Patch Status', trigger: 'DEF Limited', reasoning: 'Last patch applied 45 days ago. SLA requires 30 days. 1 issue flagged for review.', confidence: '89%', outcome: 'warn' },
-                { time: '2 hrs ago', action: 'Vulnerability Scan', trigger: 'DEF Limited', reasoning: 'Automated scan results reviewed. 0 critical vulnerabilities. Scan coverage 100%.', confidence: '95%', outcome: 'check' },
-                { time: '4 hrs ago', action: 'PAM Evaluation', trigger: 'DEF Limited', reasoning: 'Privileged access management controls evaluated. JIT access confirmed active.', confidence: '87%', outcome: 'check' },
-              ]).map((row, i, arr) => (
+              {(logs.filter(l => l.type === 'reasoning').map((l, idx) => ({
+                time: l.time,
+                action: 'AI Evaluation',
+                trigger: l.message,
+                reasoning: l.detail || l.message,
+                confidence: '95%',
+                outcome: (l.detail && l.detail.includes('High') || l.detail?.includes('Critical')) ? 'alert' : 'check'
+              }))).map((row, i, arr) => (
                 <div key={i} className={`flex gap-3 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
                   <div className="text-[11px] text-slate-400 shrink-0 pt-0.5 w-[70px]">{row.time}</div>
                   <div className="flex-1">
                     <div className="text-[13px] text-slate-700 mb-0.5"><span className="font-semibold text-slate-900">{row.action}</span>{' \u00B7 '}{row.trigger}</div>
-                    <div className="text-xs text-slate-500 italic mb-1.5 leading-relaxed">{row.reasoning}</div>
+                    <div className="text-xs text-slate-500 mb-1.5 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">{row.reasoning}</div>
                     <span className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-px">Confidence: {row.confidence}</span>
                   </div>
                   <div className="shrink-0 pt-0.5">
@@ -1067,6 +1107,34 @@ function AgentDetailView({
       {detailModal === 'voice'   && <VoiceModal onClose={() => setDetailModal(null)} />}
       {detailModal === 'talk'    && <TalkModal agent={agent} onClose={() => setDetailModal(null)} />}
       {detailModal === 'chat'    && <ChatModal agent={agent} onClose={() => setDetailModal(null)} />}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div className="shrink-0 flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <FileText size={18} className="text-[#10B981]" />
+                Generated Anomaly Report
+              </h3>
+              <button onClick={() => setShowReportModal(false)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 border-none bg-transparent cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50 text-sm whitespace-pre-wrap font-mono text-slate-700">
+              {reportContent}
+            </div>
+            <div className="shrink-0 border-t border-slate-200 p-4 flex justify-end">
+              <button 
+                onClick={() => setShowReportModal(false)} 
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors border-none cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

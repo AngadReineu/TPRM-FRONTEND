@@ -87,18 +87,24 @@ async def stream_agent_logs(agent_id: str, db: Session):
         yield f"data: {json.dumps(data)}\n\n"
         await asyncio.sleep(0.05)   # small gap to avoid flooding
 
-    # 2. Stream live entries from the queue on a timer
-    queue = STREAM_QUEUES.get(agent_id, STREAM_QUEUES["a1"])
-    idx = 0
+    # 2. Stream live entries from the database on a timer
+    last_created_at = initial_logs[-1].created_at if initial_logs else None
+    
     while True:
         await asyncio.sleep(STREAM_INTERVAL)
-        entry = queue[idx % len(queue)]
-        data = {
-            "id": f"live_{agent_id}_{idx}",
-            "time": _now_time(),
-            "type": entry["type"],
-            "message": entry["message"],
-            "detail": entry.get("detail"),
-        }
-        yield f"data: {json.dumps(data)}\n\n"
-        idx += 1
+        query = db.query(AgentLog).filter(AgentLog.agent_id == agent_id, AgentLog.view == "detail")
+        if last_created_at:
+            query = query.filter(AgentLog.created_at > last_created_at)
+            
+        new_logs = query.order_by(AgentLog.created_at.asc()).all()
+        for log in new_logs:
+            data = {
+                "id": log.id,
+                "time": log.time,
+                "type": log.type,
+                "message": log.message,
+                "detail": log.detail,
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+            last_created_at = log.created_at
+            await asyncio.sleep(0.05)
