@@ -58,6 +58,8 @@ def create_agent(payload: AgentCreate, db: Session = Depends(get_db), current_us
         alert_level=payload.alert_level,
         control_list=payload.control_list,
         supplier_list=payload.supplier_list,
+        internal_spoc=payload.internal_spoc,
+        external_spoc=payload.external_spoc,
     )
     db.add(agent)
     db.commit()
@@ -208,8 +210,12 @@ def get_agent_report(agent_id: str):
     report_path = r"C:\Users\Angad\Downloads\gmail_po_report.txt"
     if not os.path.exists(report_path):
         raise HTTPException(status_code=404, detail="Report not generated yet.")
-    with open(report_path, "r", encoding="utf-8") as f:
-        return {"report": f.read()}
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            return {"report": f.read()}
+    except UnicodeDecodeError:
+        with open(report_path, "r", encoding="latin-1") as f:
+            return {"report": f.read()}
 
 @router.post("/{agent_id}/run")
 def run_agent(agent_id: str, db: Session = Depends(get_db)):
@@ -223,7 +229,8 @@ def run_agent(agent_id: str, db: Session = Depends(get_db)):
         
     # Launch script in background
     import sys
-    subprocess.Popen([sys.executable, script_path, agent_id])
+    external_spoc = getattr(agent, "external_spoc", "andguy123@gmail.com") or "andguy123@gmail.com"
+    subprocess.Popen([sys.executable, script_path, agent_id, external_spoc])
     
     return {"status": "started", "agent_id": agent_id}
 

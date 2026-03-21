@@ -122,7 +122,7 @@ const MOCK_AGENTS: Agent[] = [
     controls: 4, suppliers: 2, gradient: 'linear-gradient(135deg, #0EA5E9, #6366F1)',
     alerts: 2, lastActive: '2 min ago', health: 82, division: 'Marketing Dept',
     frequency: 'Hourly', notify: ['Risk Manager', 'Compliance Officer'],
-    internalSPOC: 'priya@abc.co', externalSPOC: 'john@xyz.com', truthMatch: 50,
+    internalSpoc: 'priya@abc.co', externalSpoc: 'john@xyz.com', truthMatch: 50,
     agentName: 'Agent Aria', role: 'Contract & Process Compliance Specialist', color: '#0EA5E9', avatarSeed: 'Aria',
     uptime: '99.1%', nextEval: 'In 45 min', lastScan: '09:14 AM', openTasks: 3,
     currentTask: 'Auditing SOW signatures and contractual obligation timelines for XYZ Corporation',
@@ -132,7 +132,7 @@ const MOCK_AGENTS: Agent[] = [
     controls: 3, suppliers: 3, gradient: 'linear-gradient(135deg, #10B981, #0EA5E9)',
     alerts: 0, lastActive: '8 min ago', health: 94, division: 'Operations Dept',
     frequency: 'Daily', notify: ['Risk Manager'],
-    internalSPOC: 'raj@abc.co', externalSPOC: 'ops@abc.com', truthMatch: 100,
+    internalSpoc: 'raj@abc.co', externalSpoc: 'ops@abc.com', truthMatch: 100,
     agentName: 'Agent Blake', role: 'SLA & Supplier Process Monitor', color: '#10B981', avatarSeed: 'Blake',
     uptime: '98.7%', nextEval: 'In 2 hrs', lastScan: '08:52 AM', openTasks: 1,
     currentTask: 'Verifying SLA adherence and invoice approval workflows across 3 suppliers',
@@ -142,7 +142,7 @@ const MOCK_AGENTS: Agent[] = [
     controls: 4, suppliers: 1, gradient: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
     alerts: 3, lastActive: 'just now', health: 61, division: 'Technical Dept',
     frequency: 'Every 6hrs', notify: ['Risk Manager', 'DPO', 'Admin'],
-    internalSPOC: 'anita@abc.co', externalSPOC: 'info@def.com', truthMatch: 0,
+    internalSpoc: 'anita@abc.co', externalSpoc: 'info@def.com', truthMatch: 0,
     agentName: 'Agent Casey', role: 'Network & Access Review Auditor', color: '#8B5CF6', avatarSeed: 'Casey',
     uptime: '97.3%', nextEval: 'In 1 hr', lastScan: '08:30 AM', openTasks: 5,
     currentTask: 'Running quarterly access review across Active Directory',
@@ -684,6 +684,8 @@ export interface AgentCreateInput {
   alertLevel?: string;
   controlList?: string[];
   supplierList?: string[];
+  internalSpoc?: string;
+  externalSpoc?: string;
 }
 
 /**
@@ -713,6 +715,8 @@ export interface AgentUpdateInput {
   systems?: string[];
   supplierList?: string[];
   controlList?: string[];
+  internalSpoc?: string;
+  externalSpoc?: string;
 }
 
 /**

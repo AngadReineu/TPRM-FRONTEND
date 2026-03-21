@@ -55,8 +55,8 @@ export interface Agent {
   division: string;
   frequency: string;
   notify: string[];
-  internalSPOC?: string;
-  externalSPOC?: string;
+  internalSpoc?: string;
+  externalSpoc?: string;
   truthMatch?: number;
   /* enriched fields for detail page */
   agentName?: string;

@@ -17,6 +17,8 @@ class AgentCreate(BaseModel):
     alert_level: Optional[str] = None
     control_list: List[str] = []
     supplier_list: List[str] = []
+    internal_spoc: Optional[str] = None
+    external_spoc: Optional[str] = None
 
 
 class AgentUpdate(BaseModel):
@@ -43,6 +45,8 @@ class AgentUpdate(BaseModel):
     systems: Optional[List[str]] = None
     supplier_list: Optional[List[str]] = None
     control_list: Optional[List[str]] = None
+    internal_spoc: Optional[str] = None
+    external_spoc: Optional[str] = None
 
 
 class AgentResponse(BaseModel):

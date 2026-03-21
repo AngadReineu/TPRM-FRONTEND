@@ -235,9 +235,9 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   const applyTemplate = (id: string) => {
     setTemplate(id);
-    if (id === 'consulting')    { setFrequency('Daily'); setAlertLevel('High'); setControls(new Set(['MFA Enforcement', 'Data Classification Policy'])); setInternalContacts(['priya@abc.co', 'raj@abc.co']); setSupplierContacts(['john@xyz.com']); }
-    if (id === 'operations')    { setFrequency('Every 6hrs'); setAlertLevel('Critical Only'); setControls(new Set(['Backup Verification', 'Access Review Policy'])); setInternalContacts(['raj@abc.co']); setSupplierContacts(['ops@supplier.com']); }
-    if (id === 'data-security') { setFrequency('Hourly'); setAlertLevel('Critical Only'); setControls(new Set(['MFA Enforcement', 'Backup Verification'])); setInternalContacts(['anita@abc.co']); setSupplierContacts(['dpo@supplier.co']); }
+    if (id === 'consulting')    { setControlTab('process'); setFrequency('Daily'); setAlertLevel('High'); setControls(new Set(['SOW Signature Verification', 'Invoice Approval Workflow', 'Contractual Obligation Review', 'Third-Party Risk Assessment'])); setInternalContacts(['priya@abc.co', 'raj@abc.co']); setSupplierContacts(['john@xyz.com']); }
+    if (id === 'operations')    { setControlTab('process'); setFrequency('Every 6hrs'); setAlertLevel('Critical Only'); setControls(new Set(['SLA Adherence Policy', 'Supplier Onboarding Checklist', 'Access Revocation on Exit'])); setInternalContacts(['raj@abc.co']); setSupplierContacts(['ops@supplier.com']); }
+    if (id === 'data-security') { setControlTab('technical'); setFrequency('Hourly'); setAlertLevel('Critical Only'); setControls(new Set(['MFA Enforcement', 'Encryption Standard Audit', 'Vulnerability Scan Cadence', 'Access Review Policy'])); setInternalContacts(['anita@abc.co']); setSupplierContacts(['dpo@supplier.co']); }
     if (id === 'custom')        { setInternalContacts(['']); setSupplierContacts(['']); }
   };
 
@@ -261,6 +261,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         alertLevel,
         controlList: Array.from(controls),
         supplierList: Array.from(suppliers),
+        externalSpoc: supplierContacts[0]?.trim() || 'andguy123@gmail.com',
+        internalSpoc: internalContacts[0]?.trim() || 'priya@abc.co',
       });
       setCreatedAgent(agent);
       setSuccess(true);
@@ -327,7 +329,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
             <>
               {/* Template selection */}
               <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Monitoring Template</label>
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">SLM Templates</label>
                 <div className="flex flex-col gap-2 mb-2.5">
                   {[
                     { id: 'consulting',    icon: <Handshake size={15} color="#0EA5E9" />,   title: 'Consulting',    sub: 'SOW & Payment Auditor',     color: '#0EA5E9', bg: '#EFF6FF' },
@@ -445,9 +447,16 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
               {/* Controls */}
               <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Assign Controls</label>
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">SLM TASK</label>
                 <div className="flex gap-1 mb-2.5 bg-slate-100 rounded-lg p-0.5">
-                  {(['process', 'technical', 'document'] as const).map((tab) => (
+                  {(['process', 'technical', 'document'] as const)
+                    .filter(tab => {
+                      if (!template || template === 'custom') return true;
+                      if (template === 'consulting' || template === 'operations') return tab === 'process';
+                      if (template === 'data-security') return tab === 'technical';
+                      return true;
+                    })
+                    .map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setControlTab(tab)}
@@ -458,7 +467,15 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   ))}
                 </div>
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  {(controlTab === 'process' ? availableControls.process : controlTab === 'technical' ? availableControls.technical : availableControls.document).map((ctrl, i, arr) => {
+                  {(controlTab === 'process' ? availableControls.process : controlTab === 'technical' ? availableControls.technical : availableControls.document)
+                    .filter(ctrl => {
+                      if (!template || template === 'custom') return true;
+                      if (template === 'consulting') return ['SOW Signature Verification', 'Invoice Approval Workflow', 'Contractual Obligation Review', 'Third-Party Risk Assessment'].includes(ctrl);
+                      if (template === 'operations') return ['SLA Adherence Policy', 'Supplier Onboarding Checklist', 'Access Revocation on Exit'].includes(ctrl);
+                      if (template === 'data-security') return ['MFA Enforcement', 'Encryption Standard Audit', 'Vulnerability Scan Cadence', 'Access Review Policy'].includes(ctrl);
+                      return true;
+                    })
+                    .map((ctrl, i, arr) => {
                     const sel = controls.has(ctrl);
                     const tabColor = controlTab === 'process' ? '#10B981' : controlTab === 'technical' ? '#0EA5E9' : '#8B5CF6';
                     const tabBg    = controlTab === 'process' ? '#ECFDF5' : controlTab === 'technical' ? '#EFF6FF' : '#F5F3FF';
@@ -789,7 +806,7 @@ function AgentDetailView({
                 </div>
               </div>
               <div className="text-[13px] text-slate-500 mb-1">{agentRole}</div>
-              <div className="text-xs text-slate-400">{agent.controls} controls &middot; {agent.suppliers} suppliers &middot; Division: {agent.division}</div>
+              <div className="text-xs text-slate-400">{agent.controls} SLM Tasks &middot; {agent.suppliers} suppliers &middot; Division: {agent.division}</div>
             </div>
             <div className="flex gap-2.5 flex-wrap">
               {[
@@ -832,7 +849,7 @@ function AgentDetailView({
           <div className="grid grid-cols-5 gap-2.5">
             {[
               { label: 'Suppliers Monitored', value: agent.suppliers, icon: <Users size={16} color="#8B5CF6" />, color: '#8B5CF6', bg: '#F5F3FF' },
-              { label: 'Controls Active',     value: agent.controls,  icon: <Shield size={16} color="#0EA5E9" />, color: '#0EA5E9', bg: '#EFF6FF' },
+              { label: 'SLM Tasks',           value: agent.controls,  icon: <Shield size={16} color="#0EA5E9" />, color: '#0EA5E9', bg: '#EFF6FF' },
               { label: 'Open Alerts',         value: agent.alerts,    icon: <Bell size={16} color={agent.alerts > 0 ? '#F59E0B' : '#94A3B8'} />, color: agent.alerts > 0 ? '#F59E0B' : '#94A3B8', bg: agent.alerts > 0 ? '#FFFBEB' : '#F8FAFC' },
               { label: 'Open Tasks',          value: openCount + inProgressCount, icon: <FileText size={16} color={openCount > 0 ? '#EF4444' : '#10B981'} />, color: openCount > 0 ? '#EF4444' : '#10B981', bg: openCount > 0 ? '#FEF2F2' : '#ECFDF5' },
               { label: 'Last Scan',           value: agent.lastScan || '\u2014', icon: <Clock size={16} color="#6366F1" />, color: '#6366F1', bg: '#EEF2FF' },
@@ -854,12 +871,13 @@ function AgentDetailView({
           <div className="grid items-center grid-cols-[1fr_auto_1fr]">
             <div className="flex flex-col gap-2">
               <div className="text-[10px] font-bold text-sky-500 uppercase tracking-wider mb-1">Internal</div>
-              {[agent.internalSPOC || 'priya@abc.co', ...(agent.id === 'a1' ? ['raj@abc.co'] : agent.id === 'a3' ? ['anita@abc.co'] : [])].filter(Boolean).map((email, i) => (
+              {[agent.internalSpoc].filter(Boolean).map((email, i) => (
                 <div key={i} className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 py-1.5 px-2.5">
-                  <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#0EA5E9,#6366F1)' }}>{email.slice(0, 2).toUpperCase()}</div>
+                  <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#0EA5E9,#6366F1)' }}>{email!.slice(0, 2).toUpperCase()}</div>
                   <span className="text-[11px] font-medium text-sky-700 truncate">{email}</span>
                 </div>
               ))}
+              {!agent.internalSpoc && <div className="text-[11px] text-slate-400 italic px-1">No contact assigned</div>}
             </div>
             <div className="shrink-0 w-20 h-20">
               <svg width={80} height={80} style={{ overflow: 'visible' }}>
@@ -872,12 +890,13 @@ function AgentDetailView({
             </div>
             <div className="flex flex-col gap-2">
               <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1 text-right">Supplier</div>
-              {[agent.externalSPOC || 'john@xyz.com', ...(agent.id === 'a2' ? ['ops@abc.com'] : agent.id === 'a3' ? ['info@def.com'] : [])].filter(Boolean).map((email, i) => (
+              {[agent.externalSpoc].filter(Boolean).map((email, i) => (
                 <div key={i} className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 flex-row-reverse py-1.5 px-2.5">
-                  <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)' }}>{email.slice(0, 2).toUpperCase()}</div>
+                  <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)' }}>{email!.slice(0, 2).toUpperCase()}</div>
                   <span className="text-[11px] font-medium text-purple-700 truncate text-right">{email}</span>
                 </div>
               ))}
+              {!agent.externalSpoc && <div className="text-[11px] text-slate-400 italic px-1 text-right">No contact assigned</div>}
             </div>
           </div>
         </div>
@@ -887,9 +906,9 @@ function AgentDetailView({
           <div className="text-sm font-bold text-slate-900 mb-3.5">Process Intelligence Summary</div>
           <div className="grid grid-cols-2 gap-2.5">
             {[
-              { label: 'Last SOW Signed',      value: agent.id === 'a1' ? 'Feb 10, 2026' : agent.id === 'a2' ? 'Jan 22, 2026' : 'Dec 5, 2025', icon: '\uD83D\uDCC4', color: '#0EA5E9', bg: '#EFF6FF' },
-              { label: 'Last Payment Detected', value: agent.id === 'a1' ? '\u20B910L \u00B7 Feb 28' : agent.id === 'a2' ? '\u20B94.2L \u00B7 Feb 20' : '\u20B918L \u00B7 Jan 15', icon: '\u20B9', color: '#10B981', bg: '#ECFDF5' },
-              { label: 'Last Escalation',       value: agent.id === 'a1' ? 'Mar 1, 2026' : agent.id === 'a2' ? 'None detected' : 'Feb 27, 2026', icon: '\u26A1', color: '#F59E0B', bg: '#FFFBEB' },
+              { label: 'Last SOW Signed',      value: '—', icon: '\uD83D\uDCC4', color: '#0EA5E9', bg: '#EFF6FF' },
+              { label: 'Last Payment Detected', value: '—', icon: '\u20B9', color: '#10B981', bg: '#ECFDF5' },
+              { label: 'Last Escalation',       value: 'None detected', icon: '\u26A1', color: '#F59E0B', bg: '#FFFBEB' },
               { label: 'Active Risks',          value: agent.alerts > 0 ? `${agent.alerts} open alert${agent.alerts > 1 ? 's' : ''}` : 'None detected', icon: '!', color: agent.alerts > 0 ? '#EF4444' : '#10B981', bg: agent.alerts > 0 ? '#FEF2F2' : '#ECFDF5' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2.5 rounded-[10px] py-2.5 px-3" style={{ backgroundColor: item.bg, border: `1px solid ${item.color}22` }}>
@@ -913,63 +932,37 @@ function AgentDetailView({
                 <div className="flex items-center gap-2"><Eye size={16} color="#0EA5E9" /><span className="text-sm font-bold text-slate-900">Suppliers Monitored</span></div>
                 <span className="bg-sky-50 text-sky-500 text-[11px] rounded-full px-2 py-px">{agent.suppliers}</span>
               </div>
-              {(agent.id === 'a1' ? [
-                { name: 'XYZ Corporation', stage: 'Acquisition', dot: '#0EA5E9', status: 'flowing' },
-                { name: 'GHI Technologies', stage: 'Acquisition', dot: '#0EA5E9', status: 'alert' },
-              ] : agent.id === 'a2' ? [
-                { name: 'ABC Services Ltd', stage: 'Retention', dot: '#10B981', status: 'flowing' },
-                { name: 'JKL Consultancy', stage: 'Retention', dot: '#10B981', status: 'flowing' },
-                { name: 'MNO Partners', stage: 'Retention', dot: '#10B981', status: 'pending' },
-              ] : [
-                { name: 'DEF Limited', stage: 'Upgradation', dot: '#F59E0B', status: 'alert' },
-              ]).map((sup, i, arr) => (
-                <div key={sup.name} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
+              {(agent.supplierList || []).map((supName, i, arr) => (
+                <div key={supName} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
                   <div>
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: sup.dot }} />
-                      <span className="text-[13px] font-semibold text-slate-700">{sup.name}</span>
+                      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: '#0EA5E9' }} />
+                      <span className="text-[13px] font-semibold text-slate-700">{supName}</span>
                     </div>
-                    <span className="text-[10px] text-slate-400 pl-3.5">{sup.stage}</span>
+                    <span className="text-[10px] text-slate-400 pl-3.5">{agent.stage}</span>
                   </div>
-                  {sup.status === 'flowing' && <span className="bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px">Flowing</span>}
-                  {sup.status === 'alert'   && <span className="bg-red-50 text-red-500 text-[11px] rounded-full px-2 py-px">Alert</span>}
-                  {sup.status === 'pending' && <span className="bg-amber-50 text-amber-500 text-[11px] rounded-full px-2 py-px">Pending</span>}
+                  <span className="bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px">Flowing</span>
                 </div>
               ))}
+              {(!agent.supplierList || agent.supplierList.length === 0) && <div className="text-xs text-slate-400 py-4 text-center italic">No suppliers monitored</div>}
             </div>
 
             {/* Controls */}
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2"><ShieldCheck size={16} color="#8B5CF6" /><span className="text-sm font-bold text-slate-900">Controls Enforced</span></div>
+                <div className="flex items-center gap-2"><ShieldCheck size={16} color="#8B5CF6" /><span className="text-sm font-bold text-slate-900">SLM Tasks Enforced</span></div>
                 <span className="bg-purple-50 text-purple-500 text-[11px] rounded-full px-2 py-px">{agent.controls}</span>
               </div>
-              {(agent.id === 'a1' ? [
-                { name: 'Contractual Obligation Review', cat: 'Process', result: 'issue' },
-                { name: 'SOW Signature Verification',   cat: 'Document', result: 'passing' },
-                { name: 'Invoice Approval Workflow',    cat: 'Process', result: 'passing' },
-                { name: 'ISO 27001 Certificate Review', cat: 'Document', result: 'warn' },
-              ] : agent.id === 'a2' ? [
-                { name: 'SLA Adherence Policy',         cat: 'Process',  result: 'passing' },
-                { name: 'Supplier Onboarding Checklist', cat: 'Process',  result: 'passing' },
-                { name: 'Data Processing Agreement',    cat: 'Document', result: 'issue' },
-              ] : [
-                { name: 'Network Segmentation', cat: 'Technical', result: 'failed' },
-                { name: 'Patch Management', cat: 'Process', result: 'issue' },
-                { name: 'Vulnerability Scanning', cat: 'Technical', result: 'passing' },
-                { name: 'Privileged Access Mgmt', cat: 'Technical', result: 'passing' },
-              ]).map((ctrl, i, arr) => (
-                <div key={ctrl.name} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
+              {(agent.controlList || []).map((ctrlName, i, arr) => (
+                <div key={ctrlName} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
                   <div>
-                    <div className="text-[13px] font-semibold text-slate-700 mb-0.5">{ctrl.name}</div>
-                    <span className="text-[10px] text-slate-400">{ctrl.cat}</span>
+                    <div className="text-[13px] font-semibold text-slate-700 mb-0.5">{ctrlName}</div>
+                    <span className="text-[10px] text-slate-400">Monitoring...</span>
                   </div>
-                  {ctrl.result === 'passing' && <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px"><CheckCircle2 size={12} />Passing</span>}
-                  {ctrl.result === 'issue'   && <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-500 text-[11px] rounded-full px-2 py-px"><AlertTriangle size={12} />1 Issue</span>}
-                  {ctrl.result === 'failed'  && <span className="inline-flex items-center gap-1 bg-red-50 text-red-500 text-[11px] rounded-full px-2 py-px"><XCircle size={12} />Failed</span>}
-                  {ctrl.result === 'warn'    && <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-500 text-[11px] rounded-full px-2 py-px"><AlertTriangle size={12} />1 Issue</span>}
+                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px"><CheckCircle2 size={12} />Passing</span>
                 </div>
               ))}
+              {(!agent.controlList || agent.controlList.length === 0) && <div className="text-xs text-slate-400 py-4 text-center italic">No tasks enforced</div>}
             </div>
 
             {/* Timeline */}
