@@ -7,9 +7,9 @@ import type {
   Agent,
   AgentDefinition,
 } from '../types';
-import type { Stage } from '@/types/shared';
-import { api } from '@/lib/api';
-import { withFallback, toCamelCase, toSnakeCase } from '@/lib/apiUtils';
+import type { Stage } from '../../../types/shared';
+import { api } from '../../../lib/api';
+import { withFallback, toCamelCase, toSnakeCase } from '../../../lib/apiUtils';
 
 /* ── Status display helpers ──────────────────────────── */
 
@@ -36,6 +36,8 @@ export const STAGE_CLR: Record<Stage, [string, string]> = {
   Offboarding: ['#F1F5F9', '#64748B'],
 };
 
+export const STAGES: Stage[] = ['Acquisition', 'Retention', 'Upgradation', 'Offboarding'];
+
 /* ── Log type styles ─────────────────────────────────── */
 
 export const LOG_STYLE: Record<LogType, { color: string; bg: string; label: string }> = {
@@ -60,94 +62,25 @@ export const AVATAR_GRADIENTS = [
   'linear-gradient(135deg,#EF4444,#EC4899)',
 ];
 
+/* ── Avatar seeds for DiceBear personas ─────────────── */
+
+export const AVATAR_SEEDS = [
+  { seed: 'Aria', label: 'Aria' },
+  { seed: 'Blake', label: 'Blake' },
+  { seed: 'Casey', label: 'Casey' },
+  { seed: 'Dana', label: 'Dana' },
+  { seed: 'Ellis', label: 'Ellis' },
+  { seed: 'Finn', label: 'Finn' },
+  { seed: 'Gwen', label: 'Gwen' },
+  { seed: 'Harper', label: 'Harper' },
+];
+
 /* ── Control lists ───────────────────────────────────── */
-
-export const PROCESS_CONTROLS = [
-  'SLA Adherence Policy',
-  'Supplier Onboarding Checklist',
-  'Contractual Obligation Review',
-  'Invoice Approval Workflow',
-  'Access Revocation on Exit',
-  'Third-Party Risk Assessment',
-];
-
-export const TECHNICAL_CONTROLS = [
-  'MFA Enforcement',
-  'Data Classification Policy',
-  'Backup Verification',
-  'Access Review Policy',
-  'Encryption Standard Audit',
-  'Vulnerability Scan Cadence',
-];
-
-export const DOCUMENT_CONTROLS = [
-  'ISO 27001 Certificate Review',
-  'NDA Compliance Check',
-  'Data Processing Agreement (DPA)',
-  'SOW Signature Verification',
-  'Audit Report Review',
-  'Policy Acknowledgement Tracker',
-];
 
 /* ── Suppliers list ──────────────────────────────────── */
 
-export const SUPPLIERS_LIST = ['XYZ Corporation', 'ABC Services', 'DEF Limited', 'GHI Technologies'];
-
-/* ── Stage list ──────────────────────────────────────── */
-
-export const STAGES: Stage[] = ['Acquisition', 'Retention', 'Upgradation', 'Offboarding'];
-
-/* ── Avatar seeds for picker ─────────────────────────── */
-
-export const AVATAR_SEEDS = [
-  { seed: 'Aria',   label: 'Aria'   },
-  { seed: 'Blake',  label: 'Blake'  },
-  { seed: 'Casey',  label: 'Casey'  },
-  { seed: 'Dana',   label: 'Dana'   },
-  { seed: 'Ellis',  label: 'Ellis'  },
-  { seed: 'Felix',  label: 'Felix'  },
-  { seed: 'Grace',  label: 'Grace'  },
-  { seed: 'Harper', label: 'Harper' },
-  { seed: 'Indira', label: 'Indira' },
-  { seed: 'Jordan', label: 'Jordan' },
-  { seed: 'Kai',    label: 'Kai'    },
-  { seed: 'Luna',   label: 'Luna'   },
-];
-
 /* ── Mock Agents (list-view data) ────────────────────── */
 
-const MOCK_AGENTS: Agent[] = [
-  {
-    id: 'a1', name: 'Agent Aria', initials: 'A1', status: 'live', stage: 'Acquisition',
-    controls: 4, suppliers: 2, gradient: 'linear-gradient(135deg, #0EA5E9, #6366F1)',
-    alerts: 2, lastActive: '2 min ago', health: 82, division: 'Marketing Dept',
-    frequency: 'Hourly', notify: ['Risk Manager', 'Compliance Officer'],
-    internalSpoc: 'priya@abc.co', externalSpoc: 'john@xyz.com', truthMatch: 50,
-    agentName: 'Agent Aria', role: 'Contract & Process Compliance Specialist', color: '#0EA5E9', avatarSeed: 'Aria',
-    uptime: '99.1%', nextEval: 'In 45 min', lastScan: '09:14 AM', openTasks: 3,
-    currentTask: 'Auditing SOW signatures and contractual obligation timelines for XYZ Corporation',
-  },
-  {
-    id: 'a2', name: 'Agent Blake', initials: 'A2', status: 'active', stage: 'Retention',
-    controls: 3, suppliers: 3, gradient: 'linear-gradient(135deg, #10B981, #0EA5E9)',
-    alerts: 0, lastActive: '8 min ago', health: 94, division: 'Operations Dept',
-    frequency: 'Daily', notify: ['Risk Manager'],
-    internalSpoc: 'raj@abc.co', externalSpoc: 'ops@abc.com', truthMatch: 100,
-    agentName: 'Agent Blake', role: 'SLA & Supplier Process Monitor', color: '#10B981', avatarSeed: 'Blake',
-    uptime: '98.7%', nextEval: 'In 2 hrs', lastScan: '08:52 AM', openTasks: 1,
-    currentTask: 'Verifying SLA adherence and invoice approval workflows across 3 suppliers',
-  },
-  {
-    id: 'a3', name: 'Agent Casey', initials: 'A3', status: 'syncing', stage: 'Upgradation',
-    controls: 4, suppliers: 1, gradient: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
-    alerts: 3, lastActive: 'just now', health: 61, division: 'Technical Dept',
-    frequency: 'Every 6hrs', notify: ['Risk Manager', 'DPO', 'Admin'],
-    internalSpoc: 'anita@abc.co', externalSpoc: 'info@def.com', truthMatch: 0,
-    agentName: 'Agent Casey', role: 'Network & Access Review Auditor', color: '#8B5CF6', avatarSeed: 'Casey',
-    uptime: '97.3%', nextEval: 'In 1 hr', lastScan: '08:30 AM', openTasks: 5,
-    currentTask: 'Running quarterly access review across Active Directory',
-  },
-];
 
 export const openAlerts = { total: 5, critical: 3, high: 2 };
 
@@ -532,7 +465,7 @@ const STREAM_QUEUES_LIST: Record<string, Array<Omit<LogEntry, 'id' | 'time'>>> =
 /* ── Getter functions ────────────────────────────────── */
 
 export function getMockAgents(): Agent[] {
-  return [...MOCK_AGENTS];
+  return [];
 }
 
 export function getAgentDefinitions(): Record<string, AgentDefinition> {
@@ -586,22 +519,16 @@ export function getAvatarUrl(seed: string): string {
  * Fetch all agents from the API with fallback to mock data.
  */
 export async function getAgents(): Promise<Agent[]> {
-  return withFallback(
-    async () => toCamelCase(await api.get<unknown[]>('/agents')),
-    MOCK_AGENTS,
-    'agents'
-  );
+  const data = await api.get<unknown[]>('/agents');
+  return toCamelCase<Agent[]>(data);
 }
 
 /**
  * Fetch a single agent by ID from the API with fallback to mock data.
  */
 export async function getAgent(id: string): Promise<Agent | undefined> {
-  return withFallback(
-    async () => toCamelCase(await api.get<unknown>(`/agents/${id}`)),
-    MOCK_AGENTS.find(a => a.id === id),
-    'agent'
-  );
+  const data = await api.get<unknown>(`/agents/${id}`);
+  return toCamelCase<Agent>(data);
 }
 
 /**
@@ -686,6 +613,11 @@ export interface AgentCreateInput {
   supplierList?: string[];
   internalSpoc?: string;
   externalSpoc?: string;
+  slmTemplate?: string;
+  jobTitle?: string;
+  jobDescription?: string;
+  internalContacts?: string[];
+  supplierContacts?: string[];
 }
 
 /**
@@ -717,6 +649,9 @@ export interface AgentUpdateInput {
   controlList?: string[];
   internalSpoc?: string;
   externalSpoc?: string;
+  internalContacts?: string[];
+  supplierContacts?: string[];
+  pendingContacts?: string[];
 }
 
 /**
@@ -748,10 +683,21 @@ export async function deleteAgent(id: string): Promise<void> {
  * Trigger an agent to run manually via API.
  */
 export async function runAgent(id: string): Promise<{status: string; agentId: string}> {
-  const response = await api.post<unknown>(`/agents/${id}/run`);
+  const response = await api.post<unknown>(`/agents/${id}/run`, {});
   return toCamelCase<{status: string; agentId: string}>(response);
 }
 
-export async function getAgentReport(id: string): Promise<{report: string}> {
-  return await api.get<{report: string}>(`/agents/${id}/report`);
+// export async function getAgentReport(id: string): Promise<{report: string}> {
+//   return await api.get<{report: string}>(`/agents/${id}/report`);
+// }
+export async function runAgentTask(id: string, taskName: string): Promise<{status: string}> {
+  const response = await api.post<unknown>(`/agents/${id}/run-task`, { task_name: taskName });
+  return toCamelCase<{status: string}>(response);
+}
+export async function clearAgentTasks(id: string): Promise<void> {
+  await api.delete(`/agents/${id}/tasks`);
+}
+
+export async function clearAgentLogs(id: string): Promise<void> {
+  await api.delete(`/agents/${id}/logs`);
 }

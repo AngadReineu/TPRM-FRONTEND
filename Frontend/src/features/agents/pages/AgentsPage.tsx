@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import {
-  Bot, ChevronLeft, Mic, Volume2, MessageSquare, Image as ImageIcon,
+  Bot, ChevronLeft, Pencil, Mic, Volume2, MessageSquare, Image as ImageIcon,
   RefreshCw, CheckCircle2, Send, X, Plus, Check,
   AlertCircle, Clock, AlertTriangle, Eye, Cpu, XCircle, ShieldCheck, Handshake, Truck,
   Activity, Zap, Shield, ChevronDown, ChevronUp,
@@ -14,8 +14,7 @@ import type { Agent, LogEntry, AgentTask, TimelineEntry, TaskStatus } from '../t
 import type { Stage } from '../../../types/shared';
 import {
   STATUS_CLR, STATUS_LABEL, STAGE_CLR, AVATAR_GRADIENTS,
-  PROCESS_CONTROLS, TECHNICAL_CONTROLS, DOCUMENT_CONTROLS,
-  SUPPLIERS_LIST, STAGES, LOG_STYLE,
+  STAGES, LOG_STYLE,
   getMockAgents, openAlerts,
   getAgentTasksList, getAgentTimelineList,
   getInitialLogsList, getStreamQueueList,
@@ -28,7 +27,8 @@ import {
   updateAgent,
   deleteAgent,
   runAgent,
-  getAgentReport,
+  runAgentTask,
+  clearAgentTasks,
 } from '../services/agents.data';
 import { getControls } from '../../controls/services/controls.data';
 import { getVendors } from '../../vendors/services/vendors.data';
@@ -45,7 +45,7 @@ import { TalkModal } from '../components/TalkModal';
 import { ChatModal } from '../components/ChatModal';
 import { useAgentLogStream } from '../hooks/useAgentLogStream';
 
-/* ─── StatusIndicator (small, shared) ─────────────────── */
+/* ─── StatusIndicator ──────────────────────────────────── */
 
 function StatusIndicator({ status, size = 8 }: { status: Agent['status']; size?: number }) {
   const color = STATUS_CLR[status];
@@ -161,35 +161,58 @@ function MultiSelect({
 
 /* ─── CreateAgentModal ──────────────────────────────────── */
 
+const CONSULTING_JOB = {
+  title: 'Contract & Commercial Compliance Specialist',
+  description: 'This agent monitors the commercial and contractual health of supplier relationships. It reads email communications between internal and supplier contacts, compares them against uploaded reference documents, and evaluates whether contractual obligations are being met.',
+  covers: [
+    'Purchase Order Verification',
+    'SOW Validation',
+    'Payment Conversation Monitoring',
+    'Approval Chain Tracking',
+    'Project Risk Identification',
+    'Contractual Obligation Tracking',
+    'Escalation & Stakeholder Review',
+  ],
+};
+
+const IT_RISK_JOB = {
+  title: 'IT Risk & Security Compliance Specialist',
+  description: 'This agent monitors technical security controls and regulatory compliance across supplier systems. It evaluates infrastructure security, data protection practices, and compliance certifications.',
+  covers: [
+    'MFA Enforcement Audit',
+    'Encryption Standards Review',
+    'Vulnerability Assessment',
+    'Access Control Review',
+    'Incident Response Readiness',
+    'Regulatory Certification Tracking',
+    'Data Classification Compliance',
+  ],
+};
+
 function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (a: Agent) => void }) {
-  const [name, setName]             = useState('');
-  const [gradient, setGradient]     = useState(AVATAR_GRADIENTS[0]);
-  const [controls, setControls]     = useState<Set<string>>(new Set(['MFA Enforcement']));
-  const [suppliers, setSuppliers]   = useState<Set<string>>(new Set());
-  const [stages, setStages]         = useState<Set<Stage>>(new Set(['Acquisition']));
+  const [name, setName] = useState('');
+  const [gradient, setGradient] = useState(AVATAR_GRADIENTS[0]);
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [customTask, setCustomTask] = useState('');
+  const [customTasks, setCustomTasks] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<Set<string>>(new Set());
+  const [stages, setStages] = useState<Set<Stage>>(new Set(['Acquisition']));
   const [alertLevel, setAlertLevel] = useState('High');
-  const [frequency, setFrequency]   = useState('Daily');
-  const [notify, setNotify]         = useState<Set<string>>(new Set(['Risk Manager']));
-  const [division, setDivision]     = useState('');
-  const [template, setTemplate]     = useState<string | null>(null);
-  const [loading, setLoading]       = useState(false);
-  const [success, setSuccess]       = useState(false);
+  const [frequency, setFrequency] = useState('Daily');
+  const [notify, setNotify] = useState<Set<string>>(new Set(['Risk Manager']));
+  const [division, setDivision] = useState('');
+  const [slmTemplate, setSlmTemplate] = useState<'consulting' | 'it-risk' | null>(null);
+  const [showJobPanel, setShowJobPanel] = useState(false);
+  const [activeControlPanel, setActiveControlPanel] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
-  const [controlTab, setControlTab] = useState<'process' | 'technical' | 'document'>('process');
   const [internalContacts, setInternalContacts] = useState<string[]>(['']);
   const [supplierContacts, setSupplierContacts] = useState<string[]>(['']);
-
-  // Fetch real controls and vendors from API
-  const [availableControls, setAvailableControls] = useState<{process: string[], technical: string[], document: string[]}>({
-    process: PROCESS_CONTROLS,
-    technical: TECHNICAL_CONTROLS,
-    document: DOCUMENT_CONTROLS,
-  });
-  const [availableSuppliers, setAvailableSuppliers] = useState<string[]>(SUPPLIERS_LIST);
+  const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
   const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [controlsFromBackend, setControlsFromBackend] = useState<{ name: string; slmTasks: string[]; supplierScope: string[]; lifecycleStage?: string; category?: string }[]>([]);
 
-  // Fetch controls and vendors on mount
   useEffect(() => {
     (async () => {
       try {
@@ -198,60 +221,94 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
           getVendors(),
           getDivisions(),
         ]);
-
-        // Group controls by category
-        const processControls = controlsData.filter(c => c.category === 'Process').map(c => c.name);
-        const technicalControls = controlsData.filter(c => c.category === 'Technical').map(c => c.name);
-        const documentControls = controlsData.filter(c => c.category === 'Document').map(c => c.name);
-
-        setAvailableControls({
-          process: processControls.length > 0 ? processControls : PROCESS_CONTROLS,
-          technical: technicalControls.length > 0 ? technicalControls : TECHNICAL_CONTROLS,
-          document: documentControls.length > 0 ? documentControls : DOCUMENT_CONTROLS,
-        });
-
-        // Extract vendor names
-        const vendorNames = vendorsData.map(v => v.name);
-        setAvailableSuppliers(vendorNames.length > 0 ? vendorNames : SUPPLIERS_LIST);
-
+        setControlsFromBackend(controlsData.map((c: any) => ({
+          name: c.name,
+          slmTasks: c.slmTasks || [],
+          supplierScope: c.supplierScope || [],
+          lifecycleStage: c.lifecycleStage,
+          category: c.category,
+        })));
+        setAvailableSuppliers(vendorsData.map((v: any) => v.name));
         setAvailableDivisions(divisionsData);
       } catch (err) {
-        console.error('Failed to load controls/vendors/divisions:', err);
-        // Keep using fallback data from constants
-      } finally {
-        setDataLoading(false);
+        console.error('Failed to load data:', err);
       }
     })();
   }, []);
 
-  const initials = name.trim() ? name.trim().slice(0, 2).toUpperCase() : 'A?';
-  const toggleStage  = (s: Stage) => { const n = new Set(stages); n.has(s) ? n.delete(s) : n.add(s); setStages(n); };
-  const toggleCtrl   = (v: string) => { const n = new Set(controls); n.has(v) ? n.delete(v) : n.add(v); setControls(n); };
-  const toggleSup    = (v: string) => { const n = new Set(suppliers); n.has(v) ? n.delete(v) : n.add(v); setSuppliers(n); };
-  const toggleNotify = (v: string) => { const n = new Set(notify); n.has(v) ? n.delete(v) : n.add(v); setNotify(n); };
-  const addContactField  = (side: 'int' | 'sup') => side === 'int' ? setInternalContacts((p) => [...p, '']) : setSupplierContacts((p) => [...p, '']);
-  const removeContact    = (side: 'int' | 'sup', i: number) => { if (side === 'int') setInternalContacts((p) => p.filter((_, idx) => idx !== i)); else setSupplierContacts((p) => p.filter((_, idx) => idx !== i)); };
-  const updateContact    = (side: 'int' | 'sup', i: number, val: string) => { if (side === 'int') setInternalContacts((p) => p.map((v, idx) => idx === i ? val : v)); else setSupplierContacts((p) => p.map((v, idx) => idx === i ? val : v)); };
+  const applyTemplate = (tpl: 'consulting' | 'it-risk') => {
+    setSlmTemplate(tpl);
+    setShowJobPanel(true);
+    setActiveControlPanel(null);
+    setSelectedTasks(new Set());
+    setCustomTasks([]);
+    if (tpl === 'consulting') { setFrequency('Daily'); setAlertLevel('High'); }
+    if (tpl === 'it-risk') { setFrequency('Every 6hrs'); setAlertLevel('Critical Only'); }
+  };
 
-  const applyTemplate = (id: string) => {
-    setTemplate(id);
-    if (id === 'consulting')    { setControlTab('process'); setFrequency('Daily'); setAlertLevel('High'); setControls(new Set(['SOW Signature Verification', 'Invoice Approval Workflow', 'Contractual Obligation Review', 'Third-Party Risk Assessment'])); setInternalContacts(['priya@abc.co', 'raj@abc.co']); setSupplierContacts(['john@xyz.com']); }
-    if (id === 'operations')    { setControlTab('process'); setFrequency('Every 6hrs'); setAlertLevel('Critical Only'); setControls(new Set(['SLA Adherence Policy', 'Supplier Onboarding Checklist', 'Access Revocation on Exit'])); setInternalContacts(['raj@abc.co']); setSupplierContacts(['ops@supplier.com']); }
-    if (id === 'data-security') { setControlTab('technical'); setFrequency('Hourly'); setAlertLevel('Critical Only'); setControls(new Set(['MFA Enforcement', 'Encryption Standard Audit', 'Vulnerability Scan Cadence', 'Access Review Policy'])); setInternalContacts(['anita@abc.co']); setSupplierContacts(['dpo@supplier.co']); }
-    if (id === 'custom')        { setInternalContacts(['']); setSupplierContacts(['']); }
+  const initials = name.trim() ? name.trim().slice(0, 2).toUpperCase() : 'A?';
+
+  const toggleStage = (s: Stage) => {
+    const n = new Set(stages);
+    n.has(s) ? n.delete(s) : n.add(s);
+    setStages(n);
+  };
+
+  const toggleTask = (v: string) => {
+    const n = new Set(selectedTasks);
+    const wasSelected = n.has(v);
+
+    if (wasSelected) {
+      n.delete(v);
+    } else {
+      n.add(v);
+      const controlsWithTask = controlsFromBackend.filter(c => c.slmTasks.includes(v));
+      if (controlsWithTask.length > 0) {
+        const newSuppliers = new Set(suppliers);
+        const newStages = new Set(stages);
+        controlsWithTask.forEach(ctrl => {
+          ctrl.supplierScope.forEach(sup => newSuppliers.add(sup));
+          if (ctrl.lifecycleStage) newStages.add(ctrl.lifecycleStage as Stage);
+        });
+        setSuppliers(newSuppliers);
+        setStages(newStages);
+      }
+    }
+    setSelectedTasks(n);
+  };
+
+  const toggleSup = (v: string) => { const n = new Set(suppliers); n.has(v) ? n.delete(v) : n.add(v); setSuppliers(n); };
+  const toggleNotify = (v: string) => { const n = new Set(notify); n.has(v) ? n.delete(v) : n.add(v); setNotify(n); };
+
+  const addContactField = (side: 'int' | 'sup') => side === 'int' ? setInternalContacts(p => [...p, '']) : setSupplierContacts(p => [...p, '']);
+  const removeContact = (side: 'int' | 'sup', i: number) => {
+    if (side === 'int') setInternalContacts(p => p.filter((_, idx) => idx !== i));
+    else setSupplierContacts(p => p.filter((_, idx) => idx !== i));
+  };
+  const updateContact = (side: 'int' | 'sup', i: number, val: string) => {
+    if (side === 'int') setInternalContacts(p => p.map((v, idx) => idx === i ? val : v));
+    else setSupplierContacts(p => p.map((v, idx) => idx === i ? val : v));
+  };
+
+  const addCustomTask = () => {
+    if (!customTask.trim()) return;
+    setCustomTasks(p => [...p, customTask.trim()]);
+    setSelectedTasks(p => new Set([...p, customTask.trim()]));
+    setCustomTask('');
   };
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     setLoading(true);
     try {
+      const jobInfo = slmTemplate === 'consulting' ? CONSULTING_JOB : slmTemplate === 'it-risk' ? IT_RISK_JOB : null;
       const firstStage = stages.size > 0 ? (Array.from(stages)[0] as Stage) : 'Acquisition';
       const agent = await createAgent({
         name: name.trim(),
         initials,
         status: 'active',
         stage: firstStage,
-        controls: controls.size,
+        controls: selectedTasks.size,
         suppliers: suppliers.size,
         gradient,
         alerts: 0,
@@ -259,11 +316,16 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         frequency,
         notify: Array.from(notify),
         alertLevel,
-        controlList: Array.from(controls),
+        controlList: Array.from(selectedTasks),
         supplierList: Array.from(suppliers),
-        externalSpoc: supplierContacts[0]?.trim() || 'andguy123@gmail.com',
-        internalSpoc: internalContacts[0]?.trim() || 'priya@abc.co',
-      });
+        internalSpoc: internalContacts.filter(Boolean)[0] || '',
+        externalSpoc: supplierContacts.filter(Boolean)[0] || '',
+        slmTemplate: slmTemplate || 'custom',
+        jobTitle: jobInfo?.title || '',
+        jobDescription: jobInfo?.description || '',
+        internalContacts: internalContacts.filter(Boolean),
+        supplierContacts: supplierContacts.filter(Boolean),
+      } as any);
       setCreatedAgent(agent);
       setSuccess(true);
     } catch (err) {
@@ -274,367 +336,634 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     }
   };
 
-  const handleViewAgents = () => {
-    if (createdAgent) {
-      onCreated(createdAgent);
-    }
-    onClose();
-  };
-
+  const handleViewAgents = () => { if (createdAgent) onCreated(createdAgent); onClose(); };
   const handleCreateAnother = () => {
-    setSuccess(false);
-    setCreatedAgent(null);
-    setName('');
-    setGradient(AVATAR_GRADIENTS[0]);
-    setControls(new Set(['MFA Enforcement']));
-    setSuppliers(new Set());
-    setStages(new Set(['Acquisition']));
-    setAlertLevel('High');
-    setFrequency('Daily');
-    setNotify(new Set(['Risk Manager']));
-    setDivision('');
-    setTemplate(null);
+    setSuccess(false); setCreatedAgent(null); setName('');
+    setGradient(AVATAR_GRADIENTS[0]); setSelectedTasks(new Set());
+    setSuppliers(new Set()); setStages(new Set(['Acquisition']));
+    setAlertLevel('High'); setFrequency('Daily');
+    setNotify(new Set(['Risk Manager'])); setDivision('');
+    setSlmTemplate(null); setShowJobPanel(false); setActiveControlPanel(null);
+    setInternalContacts(['']); setSupplierContacts(['']);
   };
 
-  const firstStage = stages.size > 0 ? (Array.from(stages)[0] as Stage) : 'Acquisition';
+  const jobInfo = slmTemplate === 'consulting' ? CONSULTING_JOB : slmTemplate === 'it-risk' ? IT_RISK_JOB : null;
+  const consultingControls = controlsFromBackend.filter(c => c.slmTasks && c.slmTasks.length > 0);
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center">
       <div onClick={onClose} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-      <div className="relative w-[480px] max-h-[85vh] bg-white rounded-2xl flex flex-col shadow-2xl z-[1]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div className="text-lg font-bold text-slate-900">Create Agent</div>
-          <button onClick={onClose} className="w-8 h-8 bg-slate-100 border-none rounded-lg cursor-pointer flex items-center justify-center text-slate-500">
-            <X size={16} />
-          </button>
-        </div>
+      <div className="relative flex items-start z-[1]" style={{ maxHeight: '85vh' }}>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
-          {success ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center gap-3.5">
-              <CheckCircle2 size={48} color="#10B981" strokeWidth={1.5} />
-              <div className="text-xl font-bold text-slate-900">Agent Created!</div>
-              <div className="flex items-center gap-2.5 bg-slate-50 rounded-full py-2.5 px-5">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: gradient }}>{initials}</div>
-                <span className="text-sm font-semibold text-slate-700">{name}</span>
-              </div>
-              <div className="flex gap-2.5 mt-1">
-                <button onClick={handleViewAgents} className="bg-sky-500 text-white border-none rounded-lg px-5 py-2.5 text-sm font-semibold cursor-pointer">View Agents</button>
-                <button onClick={handleCreateAnother} className="bg-white text-slate-700 border border-slate-200 rounded-lg px-4 py-2.5 text-sm cursor-pointer">Create Another</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Template selection */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">SLM Templates</label>
-                <div className="flex flex-col gap-2 mb-2.5">
-                  {[
-                    { id: 'consulting',    icon: <Handshake size={15} color="#0EA5E9" />,   title: 'Consulting',    sub: 'SOW & Payment Auditor',     color: '#0EA5E9', bg: '#EFF6FF' },
-                    { id: 'operations',    icon: <Truck size={15} color="#10B981" />,       title: 'Operations',    sub: 'SLA & Logistics Monitor',   color: '#10B981', bg: '#ECFDF5' },
-                    { id: 'data-security', icon: <ShieldCheck size={15} color="#8B5CF6" />, title: 'Data Security', sub: 'PII & Encryption Watchdog', color: '#8B5CF6', bg: '#F5F3FF' },
-                    { id: 'custom',        icon: <Plus size={15} color="#64748B" />,        title: 'Custom',        sub: 'Define your own parameters', color: '#64748B', bg: '#F8FAFC' },
-                  ].map((tpl) => {
-                    const sel = template === tpl.id;
-                    return (
-                      <div
-                        key={tpl.id}
-                        onClick={() => applyTemplate(tpl.id)}
-                        className="flex items-center gap-2.5 rounded-[10px] cursor-pointer transition-all py-[11px] px-3.5"
-                        style={{
-                          border: `1px solid ${sel ? tpl.color : '#E2E8F0'}`,
-                          backgroundColor: sel ? tpl.bg : '#fff',
-                        }}
-                      >
-                        <div className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center" style={{ border: `2px solid ${sel ? tpl.color : '#CBD5E1'}` }}>
-                          {sel && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tpl.color }} />}
-                        </div>
-                        <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center" style={{ backgroundColor: sel ? tpl.color + '22' : '#F1F5F9' }}>{tpl.icon}</div>
-                        <div className="flex-1">
-                          <div className="text-[13px] font-semibold text-slate-900">{tpl.title}</div>
-                          <div className="text-[11px] text-slate-400">{tpl.sub}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {template && template !== 'custom' && (
-                  <div className="text-[11px] text-emerald-500 flex items-center gap-1">
-                    <CheckCircle2 size={11} /> Template applied &mdash; fields pre-filled
-                  </div>
-                )}
-              </div>
+        {/* Main modal */}
+        <div className="w-[500px] max-h-[85vh] bg-white rounded-2xl flex flex-col shadow-2xl">
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <div className="text-lg font-bold text-slate-900">Create Agent</div>
+            <button onClick={onClose} className="w-8 h-8 bg-slate-100 border-none rounded-lg cursor-pointer flex items-center justify-center text-slate-500">
+              <X size={16} />
+            </button>
+          </div>
 
-              {/* Stakeholder Communication Monitoring */}
-              <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <div className="w-[3px] h-3.5 rounded bg-sky-500" />
-                  <span className="text-[13px] font-bold text-slate-900">Stakeholder Communication Monitoring</span>
-                </div>
-                <div className="text-xs text-slate-400 mb-3 leading-relaxed">
-                  The agent will scan email and calendar activity between these contacts to detect anomalies.
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Internal */}
-                  <div>
-                    <div className="text-[11px] font-bold text-sky-500 uppercase tracking-wider mb-1.5">Internal Contacts</div>
-                    {internalContacts.map((email, i) => (
-                      <div key={i} className="flex gap-1 mb-1.5">
-                        <input
-                          value={email}
-                          onChange={(e) => updateContact('int', i, e.target.value)}
-                          placeholder="priya@abc.co"
-                          className="flex-1 border border-slate-200 rounded-[7px] text-xs text-slate-700 outline-none bg-white py-[7px] px-2.5"
-                        />
-                        {internalContacts.length > 1 && (
-                          <button onClick={() => removeContact('int', i)} className="w-7 shrink-0 border border-red-200 rounded-[7px] bg-red-50 text-red-500 cursor-pointer flex items-center justify-center">
-                            <X size={10} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button onClick={() => addContactField('int')} className="text-[11px] text-sky-500 bg-transparent border border-dashed border-sky-200 rounded-[7px] cursor-pointer w-full py-1 px-2.5">+ Add contact</button>
-                  </div>
-                  {/* Supplier */}
-                  <div>
-                    <div className="text-[11px] font-bold text-purple-500 uppercase tracking-wider mb-1.5">Supplier Contacts</div>
-                    {supplierContacts.map((email, i) => (
-                      <div key={i} className="flex gap-1 mb-1.5">
-                        <input
-                          value={email}
-                          onChange={(e) => updateContact('sup', i, e.target.value)}
-                          placeholder="john@supplier.com"
-                          className="flex-1 border border-slate-200 rounded-[7px] text-xs text-slate-700 outline-none bg-white py-[7px] px-2.5"
-                        />
-                        {supplierContacts.length > 1 && (
-                          <button onClick={() => removeContact('sup', i)} className="w-7 shrink-0 border border-red-200 rounded-[7px] bg-red-50 text-red-500 cursor-pointer flex items-center justify-center">
-                            <X size={10} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button onClick={() => addContactField('sup')} className="text-[11px] text-purple-500 bg-transparent border border-dashed border-purple-200 rounded-[7px] cursor-pointer w-full py-1 px-2.5">+ Add contact</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Agent Name */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Agent Name *</label>
-                <input className="w-full border border-slate-200 rounded-lg text-sm text-slate-700 outline-none py-2.5 px-3" placeholder="e.g., Agent A4" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-
-              {/* Avatar Gradient */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Avatar Gradient</label>
-                <div className="flex gap-2 mb-2.5">
-                  {AVATAR_GRADIENTS.map((g) => (
-                    <div
-                      key={g}
-                      onClick={() => setGradient(g)}
-                      className="w-7 h-7 rounded-full cursor-pointer"
-                      style={{ background: g, outline: gradient === g ? '3px solid #0EA5E9' : 'none', outlineOffset: 2 }}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
+          <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+            {success ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center gap-3.5">
+                <CheckCircle2 size={48} color="#10B981" strokeWidth={1.5} />
+                <div className="text-xl font-bold text-slate-900">Agent Created!</div>
+                <div className="flex items-center gap-2.5 bg-slate-50 rounded-full py-2.5 px-5">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: gradient }}>{initials}</div>
-                  <span className="text-[13px] text-slate-500">{name || 'New Agent'}</span>
+                  <span className="text-sm font-semibold text-slate-700">{name}</span>
+                </div>
+                <div className="flex gap-2.5 mt-1">
+                  <button onClick={handleViewAgents} className="bg-sky-500 text-white border-none rounded-lg px-5 py-2.5 text-sm font-semibold cursor-pointer">View Agents</button>
+                  <button onClick={handleCreateAnother} className="bg-white text-slate-700 border border-slate-200 rounded-lg px-4 py-2.5 text-sm cursor-pointer">Create Another</button>
                 </div>
               </div>
-
-              {/* Controls */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">SLM TASK</label>
-                <div className="flex gap-1 mb-2.5 bg-slate-100 rounded-lg p-0.5">
-                  {(['process', 'technical', 'document'] as const)
-                    .filter(tab => {
-                      if (!template || template === 'custom') return true;
-                      if (template === 'consulting' || template === 'operations') return tab === 'process';
-                      if (template === 'data-security') return tab === 'technical';
-                      return true;
-                    })
-                    .map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setControlTab(tab)}
-                      className={`flex-1 rounded-md text-xs cursor-pointer border-none transition-all py-1.5 px-0 ${controlTab === tab ? 'font-bold bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(0,0,0,0.08)]' : 'font-medium bg-transparent text-[#64748B] shadow-none'}`}
-                    >
-                      {tab === 'process' ? 'Process' : tab === 'technical' ? 'Technical' : 'Document'}
-                    </button>
-                  ))}
-                </div>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  {(controlTab === 'process' ? availableControls.process : controlTab === 'technical' ? availableControls.technical : availableControls.document)
-                    .filter(ctrl => {
-                      if (!template || template === 'custom') return true;
-                      if (template === 'consulting') return ['SOW Signature Verification', 'Invoice Approval Workflow', 'Contractual Obligation Review', 'Third-Party Risk Assessment'].includes(ctrl);
-                      if (template === 'operations') return ['SLA Adherence Policy', 'Supplier Onboarding Checklist', 'Access Revocation on Exit'].includes(ctrl);
-                      if (template === 'data-security') return ['MFA Enforcement', 'Encryption Standard Audit', 'Vulnerability Scan Cadence', 'Access Review Policy'].includes(ctrl);
-                      return true;
-                    })
-                    .map((ctrl, i, arr) => {
-                    const sel = controls.has(ctrl);
-                    const tabColor = controlTab === 'process' ? '#10B981' : controlTab === 'technical' ? '#0EA5E9' : '#8B5CF6';
-                    const tabBg    = controlTab === 'process' ? '#ECFDF5' : controlTab === 'technical' ? '#EFF6FF' : '#F5F3FF';
-                    return (
-                      <div
-                        key={ctrl}
-                        onClick={() => toggleCtrl(ctrl)}
-                        className={`flex items-center gap-2.5 cursor-pointer transition-colors py-2.5 px-3.5 ${i < arr.length - 1 ? 'border-b border-[#F1F5F9]' : ''}`}
-                        style={{
-                          backgroundColor: sel ? tabBg : '#fff',
-                        }}
-                      >
-                        <div
-                          className="w-4 h-4 rounded shrink-0 flex items-center justify-center"
-                          style={{
-                            border: sel ? `2px solid ${tabColor}` : '2px solid #CBD5E1',
-                            backgroundColor: sel ? tabColor : '#fff',
-                          }}
-                        >
-                          {sel && <Check size={10} color="#fff" strokeWidth={3} />}
-                        </div>
-                        <span className="text-[13px]" style={{ fontWeight: sel ? 600 : 400, color: sel ? tabColor : '#334155' }}>{ctrl}</span>
-                        {sel && <span className="ml-auto text-[10px] font-semibold rounded-full px-2 py-px" style={{ backgroundColor: tabBg, color: tabColor }}>Selected</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-                {controls.size > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {Array.from(controls).map((c) => {
-                      const isDoc  = availableControls.document.includes(c);
-                      const isProc = availableControls.process.includes(c);
-                      const chipClr = isDoc ? '#8B5CF6' : isProc ? '#10B981' : '#0EA5E9';
-                      const chipBg  = isDoc ? '#F5F3FF' : isProc ? '#ECFDF5' : '#EFF6FF';
+            ) : (
+              <>
+                {/* SLM Templates */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">SLM Templates</label>
+                  <div className="flex flex-col gap-2 mb-1">
+                    {([
+                      { id: 'consulting' as const, icon: <Handshake size={15} color="#0EA5E9" />, title: 'Consulting Agent', sub: 'Contract & Commercial Compliance', color: '#0EA5E9', bg: '#EFF6FF', disabled: false },
+                      { id: 'it-risk' as const, icon: <ShieldCheck size={15} color="#8B5CF6" />, title: 'IT Risk Agent', sub: 'Security & Regulatory Compliance', color: '#8B5CF6', bg: '#F5F3FF', disabled: true },
+                    ]).map((tpl) => {
+                      const sel = slmTemplate === tpl.id;
                       return (
-                        <span key={c} className="text-[11px] rounded-full flex items-center gap-1 px-2 py-0.5" style={{ backgroundColor: chipBg, color: chipClr }}>
-                          {c}
-                          <button onClick={() => toggleCtrl(c)} className="bg-transparent border-none cursor-pointer p-0 flex" style={{ color: chipClr }}>
-                            <X size={9} />
-                          </button>
-                        </span>
+                        <div key={tpl.id}
+                          onClick={() => !tpl.disabled && applyTemplate(tpl.id)}
+                          className="flex items-center gap-2.5 rounded-[10px] transition-all py-[11px] px-3.5"
+                          style={{ border: `1px solid ${sel ? tpl.color : '#E2E8F0'}`, backgroundColor: sel ? tpl.bg : tpl.disabled ? '#F8FAFC' : '#fff', cursor: tpl.disabled ? 'not-allowed' : 'pointer', opacity: tpl.disabled ? 0.5 : 1 }}>
+                          <div className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center" style={{ border: `2px solid ${sel ? tpl.color : '#CBD5E1'}` }}>
+                            {sel && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tpl.color }} />}
+                          </div>
+                          <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center" style={{ backgroundColor: sel ? tpl.color + '22' : '#F1F5F9' }}>{tpl.icon}</div>
+                          <div className="flex-1">
+                            <div className="text-[13px] font-semibold text-slate-900 flex items-center gap-2">
+                              {tpl.title}
+                              {tpl.disabled && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-px rounded-full">Coming Soon</span>}
+                            </div>
+                            <div className="text-[11px] text-slate-400">{tpl.sub}</div>
+                          </div>
+                          {sel && (
+                            <button onClick={(e) => { e.stopPropagation(); setShowJobPanel(p => !p); setActiveControlPanel(null); }}
+                              className="text-[11px] font-semibold text-sky-500 bg-blue-50 border-none px-2.5 py-1 rounded-lg cursor-pointer hover:bg-blue-100 shrink-0">
+                              Job Title {showJobPanel ? '↑' : '↓'}
+                            </button>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
+                  {slmTemplate && <div className="text-[11px] text-emerald-500 flex items-center gap-1"><CheckCircle2 size={11} /> Template applied — fields pre-filled</div>}
+                </div>
 
-              {/* Suppliers */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Assign Suppliers</label>
-                <MultiSelect label="Suppliers" options={availableSuppliers} selected={suppliers} onToggle={toggleSup} chipColor={['#F5F3FF', '#8B5CF6']} />
-              </div>
+                {/* Stakeholder Communication Monitoring */}
+                <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-[3px] h-3.5 rounded bg-sky-500" />
+                    <span className="text-[13px] font-bold text-slate-900">Stakeholder Communication Monitoring</span>
+                  </div>
+                  <div className="text-xs text-slate-400 mb-3 leading-relaxed">The agent scans email activity between these contacts to detect anomalies. Add more contacts later if the agent requests them.</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-[11px] font-bold text-sky-500 uppercase tracking-wider mb-1.5">Internal Contacts</div>
+                      {internalContacts.map((email, i) => (
+                        <div key={i} className="flex gap-1 mb-1.5">
+                          <input value={email} onChange={(e) => updateContact('int', i, e.target.value)} placeholder="priya@abc.co"
+                            className="flex-1 border border-slate-200 rounded-[7px] text-xs text-slate-700 outline-none bg-white py-[7px] px-2.5" />
+                          {internalContacts.length > 1 && (
+                            <button onClick={() => removeContact('int', i)} className="w-7 shrink-0 border border-red-200 rounded-[7px] bg-red-50 text-red-500 cursor-pointer flex items-center justify-center"><X size={10} /></button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={() => addContactField('int')} className="text-[11px] text-sky-500 bg-transparent border border-dashed border-sky-200 rounded-[7px] cursor-pointer w-full py-1 px-2.5">+ Add contact</button>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-bold text-purple-500 uppercase tracking-wider mb-1.5">Supplier Contacts</div>
+                      {supplierContacts.map((email, i) => (
+                        <div key={i} className="flex gap-1 mb-1.5">
+                          <input value={email} onChange={(e) => updateContact('sup', i, e.target.value)} placeholder="john@supplier.com"
+                            className="flex-1 border border-slate-200 rounded-[7px] text-xs text-slate-700 outline-none bg-white py-[7px] px-2.5" />
+                          {supplierContacts.length > 1 && (
+                            <button onClick={() => removeContact('sup', i)} className="w-7 shrink-0 border border-red-200 rounded-[7px] bg-red-50 text-red-500 cursor-pointer flex items-center justify-center"><X size={10} /></button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={() => addContactField('sup')} className="text-[11px] text-purple-500 bg-transparent border border-dashed border-purple-200 rounded-[7px] cursor-pointer w-full py-1 px-2.5">+ Add contact</button>
+                    </div>
+                  </div>
+                </div>
 
-              {/* Stages */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Data Flow Stage</label>
-                <div className="flex gap-2 flex-wrap">
-                  {STAGES.map((s) => {
-                    const sel = stages.has(s);
-                    const [bg, c] = STAGE_CLR[s];
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => toggleStage(s)}
-                        className="rounded-lg text-[13px] cursor-pointer py-1.5 px-3.5"
-                        style={{
-                          fontWeight: sel ? 600 : 500,
-                          backgroundColor: sel ? bg : '#fff',
-                          color: sel ? c : '#64748B',
-                          border: `1px solid ${sel ? c : '#E2E8F0'}`,
-                        }}
-                      >
-                        {s}
+                {/* Agent Name */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Agent Name *</label>
+                  <input className="w-full border border-slate-200 rounded-lg text-sm text-slate-700 outline-none py-2.5 px-3" placeholder="e.g., Agent Aria" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+
+                {/* Avatar Gradient */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Avatar Gradient</label>
+                  <div className="flex gap-2 mb-2.5">
+                    {AVATAR_GRADIENTS.map((g) => (
+                      <div key={g} onClick={() => setGradient(g)} className="w-7 h-7 rounded-full cursor-pointer"
+                        style={{ background: g, outline: gradient === g ? '3px solid #0EA5E9' : 'none', outlineOffset: 2 }} />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: gradient }}>{initials}</div>
+                    <span className="text-[13px] text-slate-500">{name || 'New Agent'}</span>
+                  </div>
+                </div>
+
+                {/* SLM Tasks */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[13px] font-semibold text-slate-700">SLM Tasks</label>
+                    {selectedTasks.size > 0 && (
+                      <span className="text-[11px] font-semibold text-sky-500 bg-blue-50 px-2 py-px rounded-full">{selectedTasks.size} task{selectedTasks.size > 1 ? 's' : ''} selected</span>
+                    )}
+                  </div>
+                  {!slmTemplate ? (
+                    <div className="border border-dashed border-slate-200 rounded-lg px-4 py-6 text-center text-slate-400 text-sm">Select an SLM Template above to see available controls</div>
+                  ) : consultingControls.length === 0 ? (
+                    <div className="border border-dashed border-amber-200 bg-amber-50 rounded-lg px-4 py-5 text-center">
+                      <div className="text-[13px] font-semibold text-amber-700 mb-1">No controls created yet</div>
+                      <div className="text-xs text-amber-500">Create controls in the Controls page first, then assign them here.</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-[11px] text-slate-400 mb-2">Click a control to view and select its tasks</div>
+                      <div className="flex flex-col gap-2 mb-3">
+                        {consultingControls.map((ctrl) => {
+                          const isOpen = activeControlPanel === ctrl.name;
+                          const ctrlSelectedCount = ctrl.slmTasks.filter(t => selectedTasks.has(t)).length;
+                          return (
+                            <div key={ctrl.name}
+                              onClick={() => { setActiveControlPanel(isOpen ? null : ctrl.name); setShowJobPanel(false); }}
+                              className="flex items-center gap-3 px-3.5 py-3 rounded-xl cursor-pointer border transition-all"
+                              style={{ border: isOpen ? '2px solid #0EA5E9' : ctrlSelectedCount > 0 ? '1px solid #BAE6FD' : '1px solid #E2E8F0', backgroundColor: isOpen ? '#EFF6FF' : ctrlSelectedCount > 0 ? '#F0F9FF' : '#fff' }}>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="text-[13px] font-semibold text-slate-800">{ctrl.name}</div>
+                                  {ctrl.category && (
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                                      style={{
+                                        color: ctrl.category === 'Process' ? '#10B981' : ctrl.category === 'Document' ? '#8B5CF6' : '#3B82F6',
+                                        backgroundColor: ctrl.category === 'Process' ? '#10B98115' : ctrl.category === 'Document' ? '#8B5CF615' : '#3B82F615',
+                                      }}>
+                                      {ctrl.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-0.5">
+                                  {ctrl.slmTasks.length} task{ctrl.slmTasks.length > 1 ? 's' : ''}
+                                  {ctrlSelectedCount > 0 && <span className="text-sky-500 font-semibold ml-1">&middot; {ctrlSelectedCount} selected</span>}
+                                </div>
+                              </div>
+                              {ctrlSelectedCount > 0 && (
+                                <div className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center shrink-0">
+                                  <Check size={10} color="#fff" strokeWidth={3} />
+                                </div>
+                              )}
+                              <ChevronRight size={14} className="text-slate-400 shrink-0" style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-2 mb-2">
+                        <input className="flex-1 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none py-2 px-3"
+                          placeholder="Add custom SLM Task..."
+                          value={customTask} onChange={e => setCustomTask(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addCustomTask()} />
+                        <button onClick={addCustomTask} className="px-3 py-2 bg-sky-500 text-white rounded-lg text-xs border-none cursor-pointer hover:bg-sky-600 flex items-center gap-1">
+                          <Plus size={12} /> Add
+                        </button>
+                      </div>
+                      {selectedTasks.size > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.from(selectedTasks).map(t => (
+                            <span key={t} className="text-[11px] rounded-full flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-sky-500 border border-sky-100">
+                              {t}
+                              <button onClick={(e) => { e.stopPropagation(); toggleTask(t); }} className="bg-transparent border-none cursor-pointer p-0 flex text-sky-400"><X size={9} /></button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Assign Suppliers */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Assign Suppliers</label>
+                  <MultiSelect label="Suppliers" options={availableSuppliers} selected={suppliers} onToggle={toggleSup} chipColor={['#F5F3FF', '#8B5CF6']} />
+                </div>
+
+                {/* Data Flow Stage */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Data Flow Stage</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {STAGES.map((s) => {
+                      const sel = stages.has(s);
+                      const [bg, c] = STAGE_CLR[s];
+                      return (
+                        <button key={s} onClick={() => toggleStage(s)} className="rounded-lg text-[13px] cursor-pointer py-1.5 px-3.5"
+                          style={{ fontWeight: sel ? 600 : 500, backgroundColor: sel ? bg : '#fff', color: sel ? c : '#64748B', border: `1px solid ${sel ? c : '#E2E8F0'}` }}>
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Alert Sensitivity */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Alert Sensitivity</label>
+                  <div className="flex gap-2">
+                    {['Low', 'Medium', 'High', 'Critical Only'].map((l) => (
+                      <button key={l} onClick={() => setAlertLevel(l)}
+                        className={`rounded-lg text-[13px] cursor-pointer py-1.5 px-3 border ${alertLevel === l ? 'font-semibold bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'font-medium bg-white text-[#64748B] border-[#E2E8F0]'}`}>
+                        {l}
                       </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Frequency */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Frequency</label>
+                  <div className="flex gap-2">
+                    {['Hourly', 'Daily', 'Every 6hrs'].map((f) => (
+                      <button key={f} onClick={() => setFrequency(f)}
+                        className={`rounded-lg text-[13px] cursor-pointer py-1.5 px-3 border ${frequency === f ? 'font-semibold bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'font-medium bg-white text-[#64748B] border-[#E2E8F0]'}`}>
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Notify */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Notify</label>
+                  <MultiSelect label="Notify" options={['Risk Manager', 'Compliance Officer', 'DPO', 'Admin']} selected={notify} onToggle={toggleNotify} chipColor={['#F5F3FF', '#8B5CF6']} />
+                </div>
+
+                {/* Division */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Division</label>
+                  <div className="relative">
+                    <select className="w-full border border-slate-200 rounded-lg text-sm text-slate-700 outline-none py-2.5 px-3 bg-white appearance-none pr-8"
+                      value={division} onChange={(e) => setDivision(e.target.value)}>
+                      <option value="">Select a division&hellip;</option>
+                      {availableDivisions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {!success && (
+            <div className="px-6 py-3.5 border-t border-slate-200 flex justify-between shrink-0">
+              <button className="px-4 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 cursor-pointer">Save as Draft</button>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 cursor-pointer">Cancel</button>
+                <button onClick={handleCreate} disabled={!name.trim() || loading}
+                  className={`px-5 py-2 text-sm font-semibold border-none rounded-lg text-white cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed ${name.trim() ? 'bg-[#0EA5E9]' : 'bg-[#CBD5E1]'}`}>
+                  {loading && <RefreshCw size={14} className="animate-spin" />}
+                  {loading ? 'Creating...' : 'Create Agent'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Job Title side panel */}
+        {showJobPanel && jobInfo && (
+          <div className="w-[300px] max-h-[85vh] overflow-y-auto bg-white border border-slate-200 rounded-2xl ml-3 p-5 shadow-xl flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-[3px] h-4 rounded-full bg-sky-500" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Job Title</span>
+              </div>
+              <button onClick={() => setShowJobPanel(false)}
+                className="w-6 h-6 rounded-md bg-slate-100 border-none cursor-pointer flex items-center justify-center text-slate-400 hover:bg-slate-200">
+                <X size={12} />
+              </button>
+            </div>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+              <div className="text-[14px] font-bold text-slate-900 leading-snug mb-2">{jobInfo.title}</div>
+              <div className="text-[11px] text-slate-500 leading-relaxed">{jobInfo.description}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">What this covers</div>
+              <div className="flex flex-col gap-1.5">
+                {jobInfo.covers.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
+                    <div className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                    <span className="text-[12px] text-slate-600">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="border-t border-slate-100 pt-3">
+              <div className="text-[11px] text-slate-400 leading-relaxed">
+                The agent receives this job title and description before starting work — exactly as a new employee would.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Control Tasks side panel */}
+        {activeControlPanel && (() => {
+          const ctrl = controlsFromBackend.find(c => c.name === activeControlPanel);
+          if (!ctrl) return null;
+          return (
+            <div className="w-[300px] max-h-[85vh] overflow-y-auto bg-white border border-slate-200 rounded-2xl ml-3 p-5 shadow-xl flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-[3px] h-4 rounded-full bg-sky-500" />
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Control Tasks</span>
+                </div>
+                <button onClick={() => setActiveControlPanel(null)}
+                  className="w-6 h-6 rounded-md bg-slate-100 border-none cursor-pointer flex items-center justify-center text-slate-400 hover:bg-slate-200">
+                  <X size={12} />
+                </button>
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                <div className="text-[13px] font-bold text-slate-900">{ctrl.name}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">{ctrl.slmTasks.length} tasks defined in this control</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Select tasks to assign to agent</div>
+                <div className="flex flex-col gap-1.5">
+                  {ctrl.slmTasks.map((task) => {
+                    const sel = selectedTasks.has(task);
+                    return (
+                      <div key={task} onClick={() => toggleTask(task)}
+                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer border transition-all"
+                        style={{ border: sel ? '2px solid #0EA5E9' : '1px solid #E2E8F0', backgroundColor: sel ? '#EFF6FF' : '#fff' }}>
+                        <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center"
+                          style={{ border: sel ? '2px solid #0EA5E9' : '2px solid #CBD5E1', backgroundColor: sel ? '#0EA5E9' : '#fff' }}>
+                          {sel && <Check size={10} color="#fff" strokeWidth={3} />}
+                        </div>
+                        <span className="text-[12px] flex-1" style={{ fontWeight: sel ? 600 : 400, color: sel ? '#0EA5E9' : '#334155' }}>{task}</span>
+                      </div>
                     );
                   })}
                 </div>
               </div>
-
-              {/* Alert / Frequency / Notify / Division */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Alert Sensitivity</label>
-                <div className="flex gap-2">
-                  {['Low', 'Medium', 'High', 'Critical Only'].map((l) => (
-                    <button
-                      key={l}
-                      onClick={() => setAlertLevel(l)}
-                      className={`rounded-lg text-[13px] cursor-pointer py-1.5 px-3 border ${alertLevel === l ? 'font-semibold bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'font-medium bg-white text-[#64748B] border-[#E2E8F0]'}`}
-                    >
-                      {l}
-                    </button>
-                  ))}
+              <div className="border-t border-slate-100 pt-3">
+                <div className="text-[11px] text-slate-400 leading-relaxed">
+                  Selected tasks are added to the agent task list and run in priority order on the agent detail page.
                 </div>
               </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Frequency</label>
-                <div className="flex gap-2">
-                  {['Hourly', 'Daily', 'Every 6hrs'].map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setFrequency(f)}
-                      className={`rounded-lg text-[13px] cursor-pointer py-1.5 px-3 border ${frequency === f ? 'font-semibold bg-[#0EA5E9] text-white border-[#0EA5E9]' : 'font-medium bg-white text-[#64748B] border-[#E2E8F0]'}`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Notify</label>
-                <MultiSelect label="Notify" options={['Risk Manager', 'Compliance Officer', 'DPO', 'Admin']} selected={notify} onToggle={toggleNotify} chipColor={['#F5F3FF', '#8B5CF6']} />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Division</label>
-                <div className="relative">
-                  <select
-                    className="w-full border border-slate-200 rounded-lg text-sm text-slate-700 outline-none py-2.5 px-3 bg-white appearance-none pr-8"
-                    value={division}
-                    onChange={(e) => setDivision(e.target.value)}
-                  >
-                    <option value="">Select a division…</option>
-                    {availableDivisions.map(d => (
-                      <option key={d.id} value={d.name}>{d.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                </div>
-                {availableDivisions.length === 0 && (
-                  <div className="text-xs text-slate-400 mt-1">No divisions found — add divisions in the Library first.</div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        {!success && (
-          <div className="px-6 py-3.5 border-t border-slate-200 flex justify-between shrink-0">
-            <button className="px-4 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 cursor-pointer">Save as Draft</button>
-            <div className="flex gap-2">
-              <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 cursor-pointer">Cancel</button>
-              <button
-                onClick={handleCreate}
-                disabled={!name.trim() || loading}
-                className={`px-5 py-2 text-sm font-semibold border-none rounded-lg text-white cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed ${name.trim() ? 'bg-[#0EA5E9]' : 'bg-[#CBD5E1]'}`}
-              >
-                {loading && <RefreshCw size={14} className="animate-spin" />}
-                {loading ? 'Creating...' : 'Create Agent'}
-              </button>
             </div>
-          </div>
-        )}
+          );
+        })()}
+
       </div>
     </div>
   );
 }
 
+/* ─── SLMTasksPanel ─────────────────────────────────────── */
+
+function SLMTasksPanel({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent: (a: Agent) => void }) {
+  const [taskList, setTaskList] = useState<string[]>(agent.controlList || []);
+  const [saving, setSaving] = useState(false);
+
+  const moveUp = (i: number) => {
+    if (i === 0) return;
+    const updated = [...taskList];
+    [updated[i - 1], updated[i]] = [updated[i], updated[i - 1]];
+    setTaskList(updated);
+    saveOrder(updated);
+  };
+
+  const moveDown = (i: number) => {
+    if (i === taskList.length - 1) return;
+    const updated = [...taskList];
+    [updated[i], updated[i + 1]] = [updated[i + 1], updated[i]];
+    setTaskList(updated);
+    saveOrder(updated);
+  };
+
+  const saveOrder = async (updated: string[]) => {
+    setSaving(true);
+    try {
+      const a = await updateAgent(agent.id, { controlList: updated, controls: updated.length } as any);
+
+    } catch {
+      toast.error('Failed to update task order');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const STATUS_COLORS: Record<number, { bg: string; text: string; label: string; dot: string }> = {
+    0: { bg: '#ECFDF5', text: '#059669', label: 'Active', dot: '#10B981' },
+    1: { bg: '#F0F9FF', text: '#0369A1', label: 'Queued', dot: '#38BDF8' },
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={16} color="#8B5CF6" />
+          <span className="text-sm font-bold text-slate-900">SLM Tasks Enforced</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {saving && <RefreshCw size={12} className="animate-spin text-slate-400" />}
+          <span className="bg-purple-50 text-purple-500 text-[11px] rounded-full px-2 py-px">{taskList.length}</span>
+        </div>
+      </div>
+
+      {taskList.length === 0 && (
+        <div className="text-xs text-slate-400 py-4 text-center italic">No tasks enforced</div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {taskList.map((task, i) => {
+          const statusKey = i === 0 ? 0 : 1;
+          const s = STATUS_COLORS[statusKey];
+          return (
+            <div key={task}
+              className="flex items-center gap-3 rounded-xl border border-slate-100 px-3.5 py-3 transition-all"
+              style={{ backgroundColor: i === 0 ? '#F0FDF4' : '#F8FAFC' }}>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                style={{ backgroundColor: i === 0 ? '#D1FAE5' : '#E2E8F0', color: i === 0 ? '#059669' : '#64748B' }}>
+                {i + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-slate-700 truncate">{task}</div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.dot }} />
+                  <span className="text-[10px] font-semibold" style={{ color: s.text }}>{s.label}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button onClick={() => moveUp(i)} disabled={i === 0}
+                  className="w-5 h-5 rounded flex items-center justify-center border-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed bg-slate-100 hover:bg-sky-100 text-slate-500 hover:text-sky-600">
+                  <ChevronUp size={11} />
+                </button>
+                <button onClick={() => moveDown(i)} disabled={i === taskList.length - 1}
+                  className="w-5 h-5 rounded flex items-center justify-center border-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed bg-slate-100 hover:bg-sky-100 text-slate-500 hover:text-sky-600">
+                  <ChevronDown size={11} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {taskList.length > 0 && (
+        <div className="mt-3 text-[11px] text-slate-400 flex items-center gap-1">
+          <ChevronUp size={11} />
+          Use arrows to set priority &mdash; Step 1 runs first
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── StakeholderMap ────────────────────────────────────── */
+
+function StakeholderMap({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent: (a: Agent) => void }) {
+  const [editMode, setEditMode] = useState(false);
+  const [internalEmails, setInternalEmails] = useState<string[]>(
+    (agent as any).internalContacts?.length ? (agent as any).internalContacts : (agent.internalSpoc ? [agent.internalSpoc] : [''])
+  );
+  const [supplierEmails, setSupplierEmails] = useState<string[]>(
+    (agent as any).supplierContacts?.length ? (agent as any).supplierContacts : (agent.externalSpoc ? [agent.externalSpoc] : [''])
+  );
+  const [saving, setSaving] = useState(false);
+
+  const addEmail = (side: 'int' | 'sup') => side === 'int' ? setInternalEmails(p => [...p, '']) : setSupplierEmails(p => [...p, '']);
+  const removeEmail = (side: 'int' | 'sup', i: number) => {
+    if (side === 'int') setInternalEmails(p => p.filter((_, idx) => idx !== i));
+    else setSupplierEmails(p => p.filter((_, idx) => idx !== i));
+  };
+  const updateEmail = (side: 'int' | 'sup', i: number, val: string) => {
+    if (side === 'int') setInternalEmails(p => p.map((v, idx) => idx === i ? val : v));
+    else setSupplierEmails(p => p.map((v, idx) => idx === i ? val : v));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateAgent(agent.id, {
+        internalSpoc: internalEmails.filter(Boolean)[0] || '',
+        externalSpoc: supplierEmails.filter(Boolean)[0] || '',
+        internalContacts: internalEmails.filter(Boolean),
+        supplierContacts: supplierEmails.filter(Boolean),
+      } as any);
+      setEditMode(false);
+      toast.success('Contacts updated — running Payment Monitoring task...');
+
+      // Auto-trigger Task 3 only
+      await runAgentTask(agent.id, 'Payment Conversation Monitoring');
+
+    } catch {
+      toast.error('Failed to update contacts');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-sky-500 animate-ping opacity-70" />
+          <span className="text-sm font-bold text-slate-900">Stakeholder Communication Map</span>
+        </div>
+        {!editMode ? (
+          <button onClick={() => setEditMode(true)}
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-sky-500 bg-blue-50 border-none px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
+            <Pencil size={12} /> Edit Contacts
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={() => setEditMode(false)} className="text-[12px] text-slate-500 border border-slate-200 bg-white rounded-lg px-3 py-1.5 cursor-pointer">Cancel</button>
+            <button onClick={handleSave} disabled={saving}
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-white bg-sky-500 border-none px-3 py-1.5 rounded-lg cursor-pointer hover:bg-sky-600 disabled:opacity-50">
+              {saving ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />} Save
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editMode ? (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-[10px] font-bold text-sky-500 uppercase tracking-wider mb-2">Internal</div>
+            {internalEmails.map((email, i) => (
+              <div key={i} className="flex gap-1.5 mb-1.5">
+                <input value={email} onChange={e => updateEmail('int', i, e.target.value)} placeholder="internal@company.co"
+                  className="flex-1 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none bg-white py-2 px-2.5" />
+                {internalEmails.length > 1 && (
+                  <button onClick={() => removeEmail('int', i)} className="w-7 shrink-0 border border-red-200 rounded-lg bg-red-50 text-red-500 cursor-pointer flex items-center justify-center"><X size={10} /></button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => addEmail('int')} className="text-[11px] text-sky-500 bg-transparent border border-dashed border-sky-200 rounded-lg cursor-pointer w-full py-1.5 px-2.5 hover:bg-blue-50">+ Add email</button>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Supplier</div>
+            {supplierEmails.map((email, i) => (
+              <div key={i} className="flex gap-1.5 mb-1.5">
+                <input value={email} onChange={e => updateEmail('sup', i, e.target.value)} placeholder="contact@supplier.com"
+                  className="flex-1 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none bg-white py-2 px-2.5" />
+                {supplierEmails.length > 1 && (
+                  <button onClick={() => removeEmail('sup', i)} className="w-7 shrink-0 border border-red-200 rounded-lg bg-red-50 text-red-500 cursor-pointer flex items-center justify-center"><X size={10} /></button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => addEmail('sup')} className="text-[11px] text-purple-500 bg-transparent border border-dashed border-purple-200 rounded-lg cursor-pointer w-full py-1.5 px-2.5 hover:bg-purple-50">+ Add email</button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid items-center grid-cols-[1fr_auto_1fr]">
+          <div className="flex flex-col gap-2">
+            <div className="text-[10px] font-bold text-sky-500 uppercase tracking-wider mb-1">Internal</div>
+            {internalEmails.filter(Boolean).map((email, i) => (
+              <div key={i} className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 py-1.5 px-2.5">
+                <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#0EA5E9,#6366F1)' }}>{email.slice(0, 2).toUpperCase()}</div>
+                <span className="text-[11px] font-medium text-sky-700 truncate">{email}</span>
+              </div>
+            ))}
+            {internalEmails.filter(Boolean).length === 0 && <div className="text-[11px] text-slate-400 italic px-1">No contact assigned</div>}
+          </div>
+          <div className="shrink-0 w-20 h-20">
+            <svg width={80} height={80} style={{ overflow: 'visible' }}>
+              <line x1={10} y1={20} x2={70} y2={20} stroke="#0EA5E9" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5} />
+              <line x1={10} y1={40} x2={70} y2={40} stroke="#8B5CF6" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5} />
+              <line x1={70} y1={60} x2={10} y2={60} stroke="#10B981" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5} />
+              <circle cx={40} cy={40} r={14} fill="#fff" stroke="#E2E8F0" strokeWidth={1} />
+              <text x={40} y={44} textAnchor="middle" fontSize={8} fill="#94A3B8" fontWeight={700}>AI</text>
+            </svg>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1 text-right">Supplier</div>
+            {supplierEmails.filter(Boolean).map((email, i) => (
+              <div key={i} className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 flex-row-reverse py-1.5 px-2.5">
+                <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)' }}>{email.slice(0, 2).toUpperCase()}</div>
+                <span className="text-[11px] font-medium text-purple-700 truncate text-right">{email}</span>
+              </div>
+            ))}
+            {supplierEmails.filter(Boolean).length === 0 && <div className="text-[11px] text-slate-400 italic px-1 text-right">No contact assigned</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
-   RICH AGENT DETAIL VIEW (inline within Agents page)
+   AGENT DETAIL VIEW
 ══════════════════════════════════════════════════════════════ */
 
 function AgentDetailView({
@@ -648,22 +977,17 @@ function AgentDetailView({
 }) {
   const feedRef = useRef<HTMLDivElement>(null);
   const agentColor = agent.color || '#0EA5E9';
-  const agentRole  = agent.role || 'AI Agent';
-  const isActive   = agent.status === 'live' || agent.status === 'active';
+  const agentRole = agent.role || 'AI Agent';
+  const isActive = agent.status === 'live' || agent.status === 'active';
   const [stageBg, stageClr] = STAGE_CLR[agent.stage];
 
-  // Async data fetching state
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [initialLogs, setInitialLogs] = useState<LogEntry[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [forceDisconnect, setForceDisconnect] = useState(false);
-  
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportContent, setReportContent] = useState<string | null>(null);
 
-  // Fetch tasks, timeline, and logs
   useEffect(() => {
     let mounted = true;
     setIsLoadingData(true);
@@ -682,7 +1006,6 @@ function AgentDetailView({
     }).catch((err) => {
       console.error('Failed to fetch agent data:', err);
       if (mounted) {
-        // Fall back to sync getters
         setTasks(getAgentTasksList(agent.id));
         setTimeline(getAgentTimelineList(agent.id));
         setInitialLogs(getInitialLogsList(agent.id));
@@ -693,10 +1016,28 @@ function AgentDetailView({
     return () => { mounted = false; };
   }, [agent.id]);
 
+  // Poll for new logs and tasks every 4 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const [freshLogs, freshTasks] = await Promise.all([
+          getAgentLogs(agent.id, 'list'),
+          getAgentTasks(agent.id, 'list'),
+        ]);
+        setInitialLogs(freshLogs);
+        setTasks(freshTasks);
+      } catch (err) {
+        console.error('Poll failed:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [agent.id]);
+
   const { logs, pulse } = useAgentLogStream({
     agentId: agent.id,
     view: 'list',
-    initialLogs: initialLogs,
+    initialLogs,
     streamQueue: [],
     isActive: isActive && !forceDisconnect,
   });
@@ -716,35 +1057,45 @@ function AgentDetailView({
     }
   };
 
-  const handleViewReport = async () => {
-    try {
-      const data = await getAgentReport(agent.id);
-      setReportContent(data.report);
-      setShowReportModal(true);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to fetch report');
-    }
-  };
-
-  const [taskFilter, setTaskFilter]         = useState<TaskStatus | 'All'>('All');
+  const [taskFilter, setTaskFilter] = useState<TaskStatus | 'All'>('All');
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
-  const [detailModal, setDetailModal]       = useState<null | 'picture' | 'voice' | 'talk' | 'chat'>(null);
+  const [detailModal, setDetailModal] = useState<null | 'picture' | 'voice' | 'talk' | 'chat'>(null);
 
   const filteredTasks = taskFilter === 'All' ? tasks : tasks.filter((t) => t.status === taskFilter);
-  const openCount       = tasks.filter((t) => t.status === 'Open').length;
+  const openCount = tasks.filter((t) => t.status === 'Open').length;
   const inProgressCount = tasks.filter((t) => t.status === 'In Progress').length;
 
-  /* Auto-scroll log feed */
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [logs]);
 
   const actionCards = [
     { key: 'picture', icon: <ImageIcon size={20} color="#0EA5E9" />, iconBg: '#EFF6FF', title: 'Select Picture', sub: "Change the agent's avatar" },
-    { key: 'voice',   icon: <Mic size={20} color="#8B5CF6" />,       iconBg: '#F5F3FF', title: 'Select Voice',   sub: 'Choose how this agent speaks' },
-    { key: 'talk',    icon: <Volume2 size={20} color="#10B981" />,    iconBg: '#ECFDF5', title: 'Talk to Agent',  sub: 'Speak directly with this agent' },
-    { key: 'chat',    icon: <MessageSquare size={20} color="#F59E0B" />, iconBg: '#FFF7ED', title: 'Start Chat', sub: 'Open chat interface with agent' },
+    { key: 'voice', icon: <Mic size={20} color="#8B5CF6" />, iconBg: '#F5F3FF', title: 'Select Voice', sub: 'Choose how this agent speaks' },
+    { key: 'talk', icon: <Volume2 size={20} color="#10B981" />, iconBg: '#ECFDF5', title: 'Talk to Agent', sub: 'Speak directly with this agent' },
+    { key: 'chat', icon: <MessageSquare size={20} color="#F59E0B" />, iconBg: '#FFF7ED', title: 'Start Chat', sub: 'Open chat interface with agent' },
   ];
+
+  /* ── Reasoning rows derived from logs ── */
+  interface ReasoningRow {
+    time: string;
+    action: string;
+    trigger: string;
+    reasoning: string;
+    confidence: string;
+    outcome: 'check' | 'alert' | 'warn';
+  }
+
+  const reasoningRows: ReasoningRow[] = logs
+    .filter(l => l.type === 'reasoning')
+    .map((l) => ({
+      time: l.time,
+      action: 'AI Evaluation',
+      trigger: l.message,
+      reasoning: l.detail || l.message,
+      confidence: '95%',
+      outcome: (l.detail?.includes('High') || l.detail?.includes('Critical')) ? 'alert' : 'check',
+    }));
 
   return (
     <div className="flex flex-col min-h-full">
@@ -762,13 +1113,6 @@ function AgentDetailView({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleViewReport}
-            className="flex items-center gap-2 bg-slate-100 text-slate-700 border-none rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer hover:bg-slate-200"
-          >
-            <FileText size={16} />
-            View Report
-          </button>
-          <button
             onClick={handleRunAgent}
             disabled={isAgentRunning}
             className="flex items-center gap-2 bg-[#10B981] text-white border-none rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -780,10 +1124,9 @@ function AgentDetailView({
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {/* ── 1. AGENT PROFILE HEADER ── */}
+        {/* ── AGENT PROFILE HEADER ── */}
         <div className="bg-white border border-slate-200 rounded-[14px] p-6 mb-4 shadow-sm">
           <div className="flex items-center gap-5 flex-wrap">
-            {/* Avatar */}
             <div className="relative shrink-0">
               <img
                 src={getAvatarUrl(agent.avatarSeed || agent.initials)}
@@ -829,10 +1172,13 @@ function AgentDetailView({
           </div>
           {/* Truth match */}
           {agent.truthMatch !== undefined && (
-            <div
-              className={`mt-3 inline-flex items-center gap-2 rounded-full py-[5px] px-3.5 border ${agent.truthMatch === 100 ? 'bg-[#ECFDF5] border-[#A7F3D0]' : agent.truthMatch >= 50 ? 'bg-[#FFFBEB] border-[#FDE68A]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
-            >
-              {agent.truthMatch === 100 ? <CheckCircle2 size={13} color="#10B981" /> : agent.truthMatch >= 50 ? <AlertTriangle size={13} color="#F59E0B" /> : <AlertCircle size={13} color="#EF4444" />}
+            <div className={`mt-3 inline-flex items-center gap-2 rounded-full py-[5px] px-3.5 border ${agent.truthMatch === 100 ? 'bg-[#ECFDF5] border-[#A7F3D0]' : agent.truthMatch >= 50 ? 'bg-[#FFFBEB] border-[#FDE68A]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}>
+              {agent.truthMatch === 100
+                ? <CheckCircle2 size={13} color="#10B981" />
+                : agent.truthMatch >= 50
+                  ? <AlertTriangle size={13} color="#F59E0B" />
+                  : <AlertCircle size={13} color="#EF4444" />
+              }
               <span className={`text-xs font-semibold ${agent.truthMatch === 100 ? 'text-[#059669]' : agent.truthMatch >= 50 ? 'text-[#92400E]' : 'text-[#DC2626]'}`}>
                 Truth Match: {agent.truthMatch}%
               </span>
@@ -840,7 +1186,7 @@ function AgentDetailView({
           )}
         </div>
 
-        {/* ── 2. AGENT OVERVIEW ── */}
+        {/* ── AGENT OVERVIEW ── */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 px-5 mb-4 shadow-sm">
           <div className="flex items-center gap-1.5 mb-3.5">
             <BarChart2 size={14} color="#6366F1" />
@@ -849,10 +1195,10 @@ function AgentDetailView({
           <div className="grid grid-cols-5 gap-2.5">
             {[
               { label: 'Suppliers Monitored', value: agent.suppliers, icon: <Users size={16} color="#8B5CF6" />, color: '#8B5CF6', bg: '#F5F3FF' },
-              { label: 'SLM Tasks',           value: agent.controls,  icon: <Shield size={16} color="#0EA5E9" />, color: '#0EA5E9', bg: '#EFF6FF' },
-              { label: 'Open Alerts',         value: agent.alerts,    icon: <Bell size={16} color={agent.alerts > 0 ? '#F59E0B' : '#94A3B8'} />, color: agent.alerts > 0 ? '#F59E0B' : '#94A3B8', bg: agent.alerts > 0 ? '#FFFBEB' : '#F8FAFC' },
-              { label: 'Open Tasks',          value: openCount + inProgressCount, icon: <FileText size={16} color={openCount > 0 ? '#EF4444' : '#10B981'} />, color: openCount > 0 ? '#EF4444' : '#10B981', bg: openCount > 0 ? '#FEF2F2' : '#ECFDF5' },
-              { label: 'Last Scan',           value: agent.lastScan || '\u2014', icon: <Clock size={16} color="#6366F1" />, color: '#6366F1', bg: '#EEF2FF' },
+              { label: 'SLM Tasks', value: agent.controls, icon: <Shield size={16} color="#0EA5E9" />, color: '#0EA5E9', bg: '#EFF6FF' },
+              { label: 'Open Alerts', value: agent.alerts, icon: <Bell size={16} color={agent.alerts > 0 ? '#F59E0B' : '#94A3B8'} />, color: agent.alerts > 0 ? '#F59E0B' : '#94A3B8', bg: agent.alerts > 0 ? '#FFFBEB' : '#F8FAFC' },
+              { label: 'Open Tasks', value: openCount + inProgressCount, icon: <FileText size={16} color={openCount > 0 ? '#EF4444' : '#10B981'} />, color: openCount > 0 ? '#EF4444' : '#10B981', bg: openCount > 0 ? '#FEF2F2' : '#ECFDF5' },
+              { label: 'Last Scan', value: agent.lastScan || '\u2014', icon: <Clock size={16} color="#6366F1" />, color: '#6366F1', bg: '#EEF2FF' },
             ].map((m) => (
               <div key={m.label} className="rounded-[10px] flex flex-col gap-1.5 py-3 px-3.5" style={{ backgroundColor: m.bg }}>
                 <div className="flex items-center gap-1.5">{m.icon}<span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{m.label}</span></div>
@@ -863,53 +1209,17 @@ function AgentDetailView({
         </div>
 
         {/* ── STAKEHOLDER MAP ── */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-2 h-2 rounded-full bg-sky-500 animate-ping opacity-70" />
-            <span className="text-sm font-bold text-slate-900">Stakeholder Communication Map</span>
-          </div>
-          <div className="grid items-center grid-cols-[1fr_auto_1fr]">
-            <div className="flex flex-col gap-2">
-              <div className="text-[10px] font-bold text-sky-500 uppercase tracking-wider mb-1">Internal</div>
-              {[agent.internalSpoc].filter(Boolean).map((email, i) => (
-                <div key={i} className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 py-1.5 px-2.5">
-                  <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#0EA5E9,#6366F1)' }}>{email!.slice(0, 2).toUpperCase()}</div>
-                  <span className="text-[11px] font-medium text-sky-700 truncate">{email}</span>
-                </div>
-              ))}
-              {!agent.internalSpoc && <div className="text-[11px] text-slate-400 italic px-1">No contact assigned</div>}
-            </div>
-            <div className="shrink-0 w-20 h-20">
-              <svg width={80} height={80} style={{ overflow: 'visible' }}>
-                <line x1={10} y1={20} x2={70} y2={20} stroke="#0EA5E9" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5} />
-                <line x1={10} y1={40} x2={70} y2={40} stroke="#8B5CF6" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5} />
-                <line x1={70} y1={60} x2={10} y2={60} stroke="#10B981" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5} />
-                <circle cx={40} cy={40} r={14} fill="#fff" stroke="#E2E8F0" strokeWidth={1} />
-                <text x={40} y={44} textAnchor="middle" fontSize={8} fill="#94A3B8" fontWeight={700}>AI</text>
-              </svg>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1 text-right">Supplier</div>
-              {[agent.externalSpoc].filter(Boolean).map((email, i) => (
-                <div key={i} className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 flex-row-reverse py-1.5 px-2.5">
-                  <div className="w-[22px] h-[22px] rounded-full shrink-0 flex items-center justify-center text-white text-[8px] font-bold" style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)' }}>{email!.slice(0, 2).toUpperCase()}</div>
-                  <span className="text-[11px] font-medium text-purple-700 truncate text-right">{email}</span>
-                </div>
-              ))}
-              {!agent.externalSpoc && <div className="text-[11px] text-slate-400 italic px-1 text-right">No contact assigned</div>}
-            </div>
-          </div>
-        </div>
+        <StakeholderMap agent={agent} onUpdateAgent={onUpdateAgent} />
 
         {/* ── PROCESS INTELLIGENCE ── */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
           <div className="text-sm font-bold text-slate-900 mb-3.5">Process Intelligence Summary</div>
           <div className="grid grid-cols-2 gap-2.5">
             {[
-              { label: 'Last SOW Signed',      value: '—', icon: '\uD83D\uDCC4', color: '#0EA5E9', bg: '#EFF6FF' },
-              { label: 'Last Payment Detected', value: '—', icon: '\u20B9', color: '#10B981', bg: '#ECFDF5' },
-              { label: 'Last Escalation',       value: 'None detected', icon: '\u26A1', color: '#F59E0B', bg: '#FFFBEB' },
-              { label: 'Active Risks',          value: agent.alerts > 0 ? `${agent.alerts} open alert${agent.alerts > 1 ? 's' : ''}` : 'None detected', icon: '!', color: agent.alerts > 0 ? '#EF4444' : '#10B981', bg: agent.alerts > 0 ? '#FEF2F2' : '#ECFDF5' },
+              { label: 'Last SOW Signed', value: '—', icon: '📄', color: '#0EA5E9', bg: '#EFF6FF' },
+              { label: 'Last Payment Detected', value: '—', icon: '₹', color: '#10B981', bg: '#ECFDF5' },
+              { label: 'Last Escalation', value: 'None detected', icon: '⚡', color: '#F59E0B', bg: '#FFFBEB' },
+              { label: 'Active Risks', value: agent.alerts > 0 ? `${agent.alerts} open alert${agent.alerts > 1 ? 's' : ''}` : 'None detected', icon: '!', color: agent.alerts > 0 ? '#EF4444' : '#10B981', bg: agent.alerts > 0 ? '#FEF2F2' : '#ECFDF5' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2.5 rounded-[10px] py-2.5 px-3" style={{ backgroundColor: item.bg, border: `1px solid ${item.color}22` }}>
                 <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-sm shrink-0 shadow-sm">{item.icon}</div>
@@ -922,7 +1232,7 @@ function AgentDetailView({
           </div>
         </div>
 
-        {/* ── MAIN LAYOUT: LEFT + RIGHT ── */}
+        {/* ── MAIN LAYOUT ── */}
         <div className="grid gap-4 items-start grid-cols-[300px_1fr]">
           {/* LEFT */}
           <div className="flex flex-col gap-3.5">
@@ -932,7 +1242,7 @@ function AgentDetailView({
                 <div className="flex items-center gap-2"><Eye size={16} color="#0EA5E9" /><span className="text-sm font-bold text-slate-900">Suppliers Monitored</span></div>
                 <span className="bg-sky-50 text-sky-500 text-[11px] rounded-full px-2 py-px">{agent.suppliers}</span>
               </div>
-              {(agent.supplierList || []).map((supName, i, arr) => (
+              {(agent.supplierList || []).map((supName: string, i: number, arr: string[]) => (
                 <div key={supName} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
                   <div>
                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -947,27 +1257,15 @@ function AgentDetailView({
               {(!agent.supplierList || agent.supplierList.length === 0) && <div className="text-xs text-slate-400 py-4 text-center italic">No suppliers monitored</div>}
             </div>
 
-            {/* Controls */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2"><ShieldCheck size={16} color="#8B5CF6" /><span className="text-sm font-bold text-slate-900">SLM Tasks Enforced</span></div>
-                <span className="bg-purple-50 text-purple-500 text-[11px] rounded-full px-2 py-px">{agent.controls}</span>
-              </div>
-              {(agent.controlList || []).map((ctrlName, i, arr) => (
-                <div key={ctrlName} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
-                  <div>
-                    <div className="text-[13px] font-semibold text-slate-700 mb-0.5">{ctrlName}</div>
-                    <span className="text-[10px] text-slate-400">Monitoring...</span>
-                  </div>
-                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px"><CheckCircle2 size={12} />Passing</span>
-                </div>
-              ))}
-              {(!agent.controlList || agent.controlList.length === 0) && <div className="text-xs text-slate-400 py-4 text-center italic">No tasks enforced</div>}
-            </div>
+            {/* SLM Tasks */}
+            <SLMTasksPanel agent={agent} onUpdateAgent={onUpdateAgent} />
 
             {/* Timeline */}
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-              <div className={`flex items-center gap-1.5 cursor-pointer ${timelineCollapsed ? 'mb-0' : 'mb-3.5'}`} onClick={() => setTimelineCollapsed((v) => !v)}>
+              <div
+                className={`flex items-center gap-1.5 cursor-pointer ${timelineCollapsed ? 'mb-0' : 'mb-3.5'}`}
+                onClick={() => setTimelineCollapsed((v) => !v)}
+              >
                 <GitMerge size={14} color="#6366F1" />
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex-1">Activity Timeline</span>
                 {timelineCollapsed ? <ChevronDown size={13} color="#94A3B8" /> : <ChevronUp size={13} color="#94A3B8" />}
@@ -991,191 +1289,184 @@ function AgentDetailView({
                   <span className="text-[15px] font-bold text-slate-900">Agent Tasks</span>
                   {tasks.length > 0 && <span className="text-[11px] font-bold text-white bg-red-500 rounded-full px-2 py-px">{tasks.length}</span>}
                 </div>
-                <div className="flex gap-1.5">
-                  {(['All', 'Open', 'In Progress', 'Resolved'] as const).map((f) => (
-                    <button key={f} onClick={() => setTaskFilter(f as TaskStatus | 'All')} className="text-[11px] font-semibold rounded-full cursor-pointer py-1 px-3" style={{ backgroundColor: taskFilter === f ? agentColor : '#F8FAFC', color: taskFilter === f ? '#fff' : '#64748B', border: `1px solid ${taskFilter === f ? agentColor : '#E2E8F0'}` }}>{f}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="px-5 py-4">
-                {filteredTasks.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 text-[13px]">
-                    <CheckCircle2 size={32} color="#A7F3D0" className="block mx-auto mb-2" />
-                    No {taskFilter !== 'All' ? taskFilter.toLowerCase() + ' ' : ''}tasks for this agent
+                <div className="flex items-center gap-2">
+                  {tasks.length > 0 && (
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('Clear all tasks for this agent?')) return;
+                        try {
+                          await clearAgentTasks(agent.id);
+                          setTasks([]);
+                          toast.success('All tasks cleared');
+                        } catch {
+                          toast.error('Failed to clear tasks');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-red-100"
+                    >
+                      <Trash2 size={11} /> Clear All
+                    </button>
+                  )}
+                  <div className="flex gap-1.5">
+                    {(['All', 'Open', 'In Progress', 'Resolved'] as const).map((f) => (
+                      <button key={f} onClick={() => setTaskFilter(f as TaskStatus | 'All')}
+                        className="text-[11px] font-semibold rounded-full cursor-pointer py-1 px-3"
+                        style={{ backgroundColor: taskFilter === f ? agentColor : '#F8FAFC', color: taskFilter === f ? '#fff' : '#64748B', border: `1px solid ${taskFilter === f ? agentColor : '#E2E8F0'}` }}>
+                        {f}
+                      </button>
+                    ))}
                   </div>
-                ) : filteredTasks.map((task) => <TaskRow key={task.id} task={task} agentColor={agentColor} />)}
+                </div>
+                <div className="px-5 py-4">
+                  {filteredTasks.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 text-[13px]">
+                      <CheckCircle2 size={32} color="#A7F3D0" className="block mx-auto mb-2" />
+                      No {taskFilter !== 'All' ? taskFilter.toLowerCase() + ' ' : ''}tasks for this agent
+                    </div>
+                  ) : filteredTasks.map((task) => <TaskRow key={task.id} task={task} agentColor={agentColor} />)}
+                </div>
               </div>
             </div>
 
-            {/* Agent Reasoning */}
+            {/* Agent Reasoning — FIXED: extracted to typed array before render */}
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-3.5 border-b border-slate-50 flex justify-between items-center">
-                <div className="flex items-center gap-2"><Cpu size={16} color="#0EA5E9" /><span className="text-sm font-bold text-slate-900">Agent Reasoning</span></div>
-                <div className="flex items-center gap-1.5">
-                  <span className="relative inline-flex w-2 h-2"><span className="absolute inset-0 rounded-full bg-emerald-500 opacity-50 animate-ping" /><span className="relative w-2 h-2 rounded-full bg-emerald-500 block" /></span>
-                  <span className="text-xs text-emerald-500">Live</span>
+                <div className="px-4 py-3.5 border-b border-slate-50 flex justify-between items-center">
+                  <div className="flex items-center gap-2"><Cpu size={16} color="#0EA5E9" /><span className="text-sm font-bold text-slate-900">Agent Reasoning</span></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="relative inline-flex w-2 h-2">
+                      <span className="absolute inset-0 rounded-full bg-emerald-500 opacity-50 animate-ping" />
+                      <span className="relative w-2 h-2 rounded-full bg-emerald-500 block" />
+                    </span>
+                    <span className="text-xs text-emerald-500">Live</span>
+                  </div>
                 </div>
+                {reasoningRows.map((row, i, arr) => (
+                  <div key={i} className={`flex gap-3 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
+                    <div className="text-[11px] text-slate-400 shrink-0 pt-0.5 w-[70px]">{row.time}</div>
+                    <div className="flex-1">
+                      <div className="text-[13px] text-slate-700 mb-0.5">
+                        <span className="font-semibold text-slate-900">{row.action}</span>
+                        {' \u00B7 '}
+                        {row.trigger}
+                      </div>
+                      <div className="text-xs text-slate-500 mb-1.5 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">{row.reasoning}</div>
+                      <span className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-px">Confidence: {row.confidence}</span>
+                    </div>
+                    <div className="shrink-0 pt-0.5">
+                      {row.outcome === 'check' && <CheckCircle2 size={16} color="#10B981" />}
+                      {row.outcome === 'alert' && <AlertCircle size={16} color="#EF4444" />}
+                      {row.outcome === 'warn' && <AlertTriangle size={16} color="#F59E0B" />}
+                    </div>
+                  </div>
+                ))}
               </div>
-              {(logs.filter(l => l.type === 'reasoning').map((l, idx) => ({
-                time: l.time,
-                action: 'AI Evaluation',
-                trigger: l.message,
-                reasoning: l.detail || l.message,
-                confidence: '95%',
-                outcome: (l.detail && l.detail.includes('High') || l.detail?.includes('Critical')) ? 'alert' : 'check'
-              }))).map((row, i, arr) => (
-                <div key={i} className={`flex gap-3 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
-                  <div className="text-[11px] text-slate-400 shrink-0 pt-0.5 w-[70px]">{row.time}</div>
-                  <div className="flex-1">
-                    <div className="text-[13px] text-slate-700 mb-0.5"><span className="font-semibold text-slate-900">{row.action}</span>{' \u00B7 '}{row.trigger}</div>
-                    <div className="text-xs text-slate-500 mb-1.5 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">{row.reasoning}</div>
-                    <span className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-px">Confidence: {row.confidence}</span>
-                  </div>
-                  <div className="shrink-0 pt-0.5">
-                    {row.outcome === 'check' && <CheckCircle2 size={16} color="#10B981" />}
-                    {row.outcome === 'alert' && <AlertCircle size={16} color="#EF4444" />}
-                    {row.outcome === 'warn'  && <AlertTriangle size={16} color="#F59E0B" />}
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            {/* Live Activity Feed */}
-            <div className="bg-white border border-slate-200 rounded-[14px] flex flex-col h-[440px]">
-              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <Zap size={16} color="#F59E0B" />
-                  <span className="text-[15px] font-bold text-slate-900">Activity Feed</span>
-                  {isActive && <span className="text-[11px] font-semibold text-emerald-500 bg-emerald-50 rounded-full border border-emerald-200 px-2 py-px">STREAMING LIVE</span>}
-                </div>
-                <span className="text-xs text-slate-400">{logs.length} entries</span>
-              </div>
-              <div className="px-5 py-2 border-b border-slate-100 flex gap-2 flex-wrap shrink-0 bg-[#FAFAFA]">
-                {Object.entries(LOG_STYLE).map(([type, s]) => <span key={type} className="text-[10px] font-bold rounded px-[7px] py-px" style={{ color: s.color, backgroundColor: s.bg }}>{s.label}</span>)}
-                <span className="text-[10px] text-slate-400 ml-1">&middot; Click REASON to expand</span>
-              </div>
-              <div ref={feedRef} className="flex-1 overflow-y-auto px-5 py-3">
-                {logs.map((entry) => <LogRow key={entry.id} entry={entry} />)}
-                {isActive && (
-                  <div className="flex items-center gap-1.5 py-1.5 text-slate-400">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 transition-opacity duration-300" style={{ opacity: pulse ? 1 : 0 }} />
-                    <span className="text-xs font-mono">Agent running...</span>
+              {/* Live Activity Feed */}
+              <div className="bg-white border border-slate-200 rounded-[14px] flex flex-col h-[440px]">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <Zap size={16} color="#F59E0B" />
+                    <span className="text-[15px] font-bold text-slate-900">Activity Feed</span>
+                    {isActive && <span className="text-[11px] font-semibold text-emerald-500 bg-emerald-50 rounded-full border border-emerald-200 px-2 py-px">STREAMING LIVE</span>}
                   </div>
-                )}
-              </div>
-              <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 shrink-0">
-                <div className="flex items-center gap-1.5 mb-1.5"><Clock size={13} color="#6366F1" /><span className="text-[11px] font-bold text-indigo-500 uppercase tracking-widest">Planned Next Steps</span></div>
-                <div className="flex gap-2 flex-wrap">
-                  {isActive ? (
-                    <>
-                      <span className="text-xs text-slate-700 bg-indigo-50 rounded-full border border-indigo-200 px-2.5 py-0.5">Re-evaluate controls ({agent.nextEval || '\u2014'})</span>
-                      <span className="text-xs text-slate-700 bg-indigo-50 rounded-full border border-indigo-200 px-2.5 py-0.5">Check supplier assessments</span>
-                      <span className="text-xs text-slate-700 bg-indigo-50 rounded-full border border-indigo-200 px-2.5 py-0.5">Update audit log entries</span>
-                    </>
-                  ) : <span className="text-xs text-slate-400">Agent idle &mdash; next evaluation {agent.nextEval || '\u2014'}</span>}
+                  <span className="text-xs text-slate-400">{logs.length} entries</span>
+                </div>
+                <div className="px-5 py-2 border-b border-slate-100 flex gap-2 flex-wrap shrink-0 bg-[#FAFAFA]">
+                  {Object.entries(LOG_STYLE).map(([type, s]) => (
+                    <span key={type} className="text-[10px] font-bold rounded px-[7px] py-px" style={{ color: s.color, backgroundColor: s.bg }}>{s.label}</span>
+                  ))}
+                  <span className="text-[10px] text-slate-400 ml-1">&middot; Click REASON to expand</span>
+                </div>
+                <div ref={feedRef} className="flex-1 overflow-y-auto px-5 py-3">
+                  {logs.map((entry) => <LogRow key={entry.id} entry={entry} />)}
+                  {isActive && (
+                    <div className="flex items-center gap-1.5 py-1.5 text-slate-400">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 transition-opacity duration-300" style={{ opacity: pulse ? 1 : 0 }} />
+                      <span className="text-xs font-mono">Agent running...</span>
+                    </div>
+                  )}
+                </div>
+                <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 shrink-0">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Clock size={13} color="#6366F1" />
+                    <span className="text-[11px] font-bold text-indigo-500 uppercase tracking-widest">Planned Next Steps</span>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {isActive ? (
+                      <>
+                        <span className="text-xs text-slate-700 bg-indigo-50 rounded-full border border-indigo-200 px-2.5 py-0.5">Re-evaluate controls ({agent.nextEval || '\u2014'})</span>
+                        <span className="text-xs text-slate-700 bg-indigo-50 rounded-full border border-indigo-200 px-2.5 py-0.5">Check supplier assessments</span>
+                        <span className="text-xs text-slate-700 bg-indigo-50 rounded-full border border-indigo-200 px-2.5 py-0.5">Update audit log entries</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400">Agent idle &mdash; next evaluation {agent.nextEval || '\u2014'}</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Action cards */}
-            <div className="grid grid-cols-2 gap-3.5">
-              {actionCards.map((ac) => (
-                <div
-                  key={ac.key}
-                  onClick={() => setDetailModal(ac.key as 'picture' | 'voice' | 'talk' | 'chat')}
-                  className="bg-white border border-slate-200 rounded-xl p-5 cursor-pointer transition-all hover:border-sky-500 hover:shadow-sm"
-                >
-                  <div className="w-10 h-10 rounded-[10px] flex items-center justify-center mb-2.5" style={{ backgroundColor: ac.iconBg }}>{ac.icon}</div>
-                  <div className="text-[15px] font-bold text-slate-900 mb-0.5">{ac.title}</div>
-                  <div className="text-[13px] text-slate-400">{ac.sub}</div>
-                </div>
-              ))}
+              {/* Action cards */}
+              <div className="grid grid-cols-2 gap-3.5">
+                {actionCards.map((ac) => (
+                  <div
+                    key={ac.key}
+                    onClick={() => setDetailModal(ac.key as 'picture' | 'voice' | 'talk' | 'chat')}
+                    className="bg-white border border-slate-200 rounded-xl p-5 cursor-pointer transition-all hover:border-sky-500 hover:shadow-sm"
+                  >
+                    <div className="w-10 h-10 rounded-[10px] flex items-center justify-center mb-2.5" style={{ backgroundColor: ac.iconBg }}>{ac.icon}</div>
+                    <div className="text-[15px] font-bold text-slate-900 mb-0.5">{ac.title}</div>
+                    <div className="text-[13px] text-slate-400">{ac.sub}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Sub-modals */}
+        {detailModal === 'picture' && <AvatarPickerModal agent={agent} onSelect={(seed) => onUpdateAgent({ ...agent, avatarSeed: seed })} onClose={() => setDetailModal(null)} />}
+        {detailModal === 'voice' && <VoiceModal onClose={() => setDetailModal(null)} />}
+        {detailModal === 'talk' && <TalkModal agent={agent} onClose={() => setDetailModal(null)} />}
+        {detailModal === 'chat' && <ChatModal agent={agent} onClose={() => setDetailModal(null)} />}
       </div>
-
-      {/* Sub-modals */}
-      {detailModal === 'picture' && <AvatarPickerModal agent={agent} onSelect={(seed) => onUpdateAgent({ ...agent, avatarSeed: seed })} onClose={() => setDetailModal(null)} />}
-      {detailModal === 'voice'   && <VoiceModal onClose={() => setDetailModal(null)} />}
-      {detailModal === 'talk'    && <TalkModal agent={agent} onClose={() => setDetailModal(null)} />}
-      {detailModal === 'chat'    && <ChatModal agent={agent} onClose={() => setDetailModal(null)} />}
-
-      {/* Report Modal */}
-      {showReportModal && (
-        <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
-            <div className="shrink-0 flex items-center justify-between p-4 border-b border-slate-200">
-              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                <FileText size={18} className="text-[#10B981]" />
-                Generated Anomaly Report
-              </h3>
-              <button onClick={() => setShowReportModal(false)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 border-none bg-transparent cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50 text-sm whitespace-pre-wrap font-mono text-slate-700">
-              {reportContent}
-            </div>
-            <div className="shrink-0 border-t border-slate-200 p-4 flex justify-end">
-              <button 
-                onClick={() => setShowReportModal(false)} 
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors border-none cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+      );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   AGENTS DASHBOARD (LIST VIEW)
-══════════════════════════════════════════════════════════════ */
+      /* ═══════════════════════════════════════════════════════════
+         AGENTS DASHBOARD
+      ══════════════════════════════════════════════════════════════ */
 
-export function AgentsPage() {
+      export function AgentsPage() {
   const location = useLocation();
-  const [view, setView]                   = useState<'dashboard' | 'detail'>('dashboard');
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [showCreate, setShowCreate]       = useState(false);
-  const [agents, setAgents]               = useState<Agent[]>([]);
-  const [isLoading, setIsLoading]         = useState(true);
-  const [error, setError]                 = useState<string | null>(null);
+      const [view, setView]                   = useState<'dashboard' | 'detail'>('dashboard');
+      const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+      const [showCreate, setShowCreate]       = useState(false);
+      const [agents, setAgents]               = useState<Agent[]>([]);
+      const [isLoading, setIsLoading]         = useState(true);
+      const [error, setError]                 = useState<string | null>(null);
 
-  // Fetch agents on mount
   useEffect(() => {
-    let mounted = true;
-    setIsLoading(true);
-    setError(null);
+        let mounted = true;
+      setIsLoading(true);
+      setError(null);
 
-    getAgents()
+      getAgents()
       .then((data) => {
-        if (mounted) {
-          setAgents(data);
-          setIsLoading(false);
-        }
+        if (mounted) {setAgents(data); setIsLoading(false); }
       })
       .catch((err) => {
         console.error('Failed to fetch agents:', err);
-        if (mounted) {
-          // Fall back to sync mock data
-          setAgents(getMockAgents());
-          setError(null); // Don't show error since we have fallback
-          setIsLoading(false);
-        }
+      if (mounted) {setAgents(getMockAgents()); setIsLoading(false); }
       });
 
-    return () => { mounted = false; };
+    return () => {mounted = false; };
   }, []);
 
   useEffect(() => {
-    if (location.state?.openCreateModal) { setShowCreate(true); setView('dashboard'); }
-    if (location.state?.openAgentDetail) {
+    if (location.state?.openCreateModal) {setShowCreate(true); setView('dashboard'); }
+      if (location.state?.openAgentDetail) {
       const found = agents.find((a) => a.id === location.state.openAgentDetail);
-      if (found) { setSelectedAgent(found); setView('detail'); }
+      if (found) {setSelectedAgent(found); setView('detail'); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, agents]);
@@ -1185,56 +1476,51 @@ export function AgentsPage() {
   const syncingCount = agents.filter((a) => a.status === 'syncing').length;
 
   const handleUpdateAgent = async (updated: Agent) => {
-    // Optimistically update local state
-    setAgents((as) => as.map((a) => (a.id === updated.id ? updated : a)));
-    if (selectedAgent?.id === updated.id) setSelectedAgent(updated);
-
-    // Persist to backend
-    try {
-      await updateAgent(updated.id, {
-        name: updated.name,
-        initials: updated.initials,
-        status: updated.status,
-        stage: updated.stage,
-        controls: updated.controls,
-        suppliers: updated.suppliers,
-        gradient: updated.gradient,
-        alerts: updated.alerts,
-        division: updated.division,
-        frequency: updated.frequency,
-        notify: updated.notify,
-        role: updated.role,
-        color: updated.color,
-        avatarSeed: updated.avatarSeed,
-        uptime: updated.uptime,
-        nextEval: updated.nextEval,
-        lastScan: updated.lastScan,
-        openTasks: updated.openTasks,
-        currentTask: updated.currentTask,
-      });
+        setAgents((as) => as.map((a) => (a.id === updated.id ? updated : a)));
+      if (selectedAgent?.id === updated.id) setSelectedAgent(updated);
+      try {
+        await updateAgent(updated.id, {
+          name: updated.name,
+          initials: updated.initials,
+          status: updated.status,
+          stage: updated.stage,
+          controls: updated.controls,
+          suppliers: updated.suppliers,
+          gradient: updated.gradient,
+          alerts: updated.alerts,
+          division: updated.division,
+          frequency: updated.frequency,
+          notify: updated.notify,
+          role: updated.role,
+          color: updated.color,
+          avatarSeed: updated.avatarSeed,
+          uptime: updated.uptime,
+          nextEval: updated.nextEval,
+          lastScan: updated.lastScan,
+          openTasks: updated.openTasks,
+          currentTask: updated.currentTask,
+        });
     } catch (err) {
-      console.error('Failed to update agent:', err);
+        console.error('Failed to update agent:', err);
       toast.error('Failed to save changes. Please try again.');
     }
   };
 
   const handleDeleteAgent = async (agent: Agent, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening detail view
-    if (!window.confirm(`Are you sure you want to delete "${agent.name}"? This action cannot be undone.`)) {
-      return;
-    }
-    try {
-      await deleteAgent(agent.id);
+        e.stopPropagation();
+      if (!window.confirm(`Are you sure you want to delete "${agent.name}"? This action cannot be undone.`)) return;
+      try {
+        await deleteAgent(agent.id);
       setAgents((prev) => prev.filter((a) => a.id !== agent.id));
       toast.success(`${agent.name} deleted successfully`);
     } catch (err) {
-      console.error('Failed to delete agent:', err);
+        console.error('Failed to delete agent:', err);
       toast.error('Failed to delete agent. Please try again.');
     }
   };
 
-  /* Detail view */
-  if (view === 'detail' && selectedAgent) {
+      /* Detail view */
+      if (view === 'detail' && selectedAgent) {
     return (
       <>
         <AgentDetailView
@@ -1244,208 +1530,201 @@ export function AgentsPage() {
         />
         <style>{`@keyframes ping{0%,100%{opacity:1}50%{opacity:0.3}} @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       </>
-    );
+      );
   }
 
-  /* Loading state */
-  if (isLoading) {
+      /* Loading state */
+      if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <Loader2 size={32} className="animate-spin text-sky-500" />
         <p className="text-slate-500 text-sm">Loading agents...</p>
       </div>
-    );
+      );
   }
 
-  /* Error state */
-  if (error) {
+      /* Error state */
+      if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <AlertCircle size={32} className="text-red-500" />
         <p className="text-slate-700 font-medium">Failed to load agents</p>
         <p className="text-slate-500 text-sm">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="bg-sky-500 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer border-none"
-        >
+        <button onClick={() => window.location.reload()} className="bg-sky-500 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer border-none">
           Retry
         </button>
       </div>
-    );
+      );
   }
 
-  /* Dashboard view */
-  return (
-    <div className="flex flex-col gap-0 max-w-[1200px]">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 m-0">Agents</h1>
-          <p className="text-[13px] text-slate-400 mt-1 mb-0">Monitor and manage your AI agents</p>
-        </div>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 bg-sky-500 text-white border-none rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer">
-          <Plus size={16} /> Create Agent
-        </button>
-      </div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4 mb-7">
-        {[
-          {
-            label: 'Live', count: liveCount, color: '#10B981',
-            indicator: (
-              <span className="relative inline-flex w-2.5 h-2.5">
-                <span className="absolute inset-0 rounded-full bg-emerald-500 opacity-50 animate-ping" />
-                <span className="relative w-2.5 h-2.5 rounded-full bg-emerald-500 block" />
-              </span>
-            ),
-            sub: null,
-          },
-          {
-            label: 'Active', count: activeCount, color: '#0EA5E9',
-            indicator: <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" />,
-            sub: null,
-          },
-          {
-            label: 'Syncing', count: syncingCount, color: '#F59E0B',
-            indicator: <RefreshCw size={14} color="#F59E0B" className="animate-spin" />,
-            sub: null,
-          },
-          {
-            label: 'Open Alerts', count: openAlerts.total, color: '#EF4444',
-            indicator: <AlertCircle size={16} color="#EF4444" />,
-            sub: `${openAlerts.critical} critical \u00B7 ${openAlerts.high} high`,
-          },
-        ].map((kpi) => (
-          <div
-            key={kpi.label}
-            className="bg-white border border-slate-200 rounded-xl shadow-sm py-[18px] px-5"
-            style={{ borderLeft: `4px solid ${kpi.color}` }}
-          >
-            <div className="flex items-center gap-2.5 mb-1">
-              <span className="text-[34px] font-bold text-slate-900">{kpi.count}</span>
-              {kpi.indicator}
-            </div>
-            <div className="text-[13px] text-slate-500">{kpi.label}</div>
-            {kpi.sub && <div className="text-[11px] text-slate-400 mt-0.5">{kpi.sub}</div>}
-          </div>
-        ))}
-      </div>
-
-      {/* Agents heading */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="text-base font-bold text-slate-900">Your Agents</div>
-        <span className="bg-slate-100 text-slate-500 text-xs font-medium rounded-full px-2 py-px">{agents.length}</span>
-      </div>
-
-      {/* Agent cards grid */}
-      <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-        {agents.map((agent) => {
-          const [sBg, sClr] = STAGE_CLR[agent.stage];
-          const avatarUrl = getAvatarUrl(agent.avatarSeed || agent.initials);
-          return (
-            <div
-              key={agent.id}
-              onClick={() => { setSelectedAgent(agent); setView('detail'); }}
-              className="bg-white border border-slate-200 rounded-2xl p-5 cursor-pointer text-center transition-all hover:shadow-md hover:border-sky-500 relative group"
-            >
-              {/* Delete button */}
-              <button
-                onClick={(e) => handleDeleteAgent(agent, e)}
-                className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500"
-                title="Delete agent"
-              >
-                <Trash2 size={14} />
-              </button>
-              <div className="flex justify-center mb-3 relative">
-                <div className="relative">
-                  <img src={avatarUrl} alt={agent.name} width={72} height={72} className="rounded-full block bg-slate-100" style={{ border: `3px solid ${STATUS_CLR[agent.status]}55` }} />
-                  <div className="absolute bottom-px right-px w-[13px] h-[13px] rounded-full border-2 border-white" style={{ backgroundColor: STATUS_CLR[agent.status] }} />
-                </div>
-              </div>
-              <div className="text-sm font-bold text-slate-900 mb-1.5">{agent.name}</div>
-              {agent.role && <div className="text-[11px] text-slate-400 mb-1.5 leading-snug">{agent.role}</div>}
-              <div className="mb-2"><StatusIndicator status={agent.status} /></div>
-              <span className="text-[10px] font-semibold rounded-full inline-block mb-2 px-2 py-0.5" style={{ backgroundColor: sBg, color: sClr }}>{agent.stage}</span>
-              <div className="text-[11px] text-slate-400">{agent.controls} controls &middot; {agent.suppliers} sup</div>
-              <div className="flex items-center gap-1 justify-center mt-2">
-                {agent.alerts === 0
-                  ? <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px"><CheckCircle2 size={11} /> No alerts</span>
-                  : <span className="inline-flex items-center gap-1 bg-red-50 text-red-500 text-[11px] rounded-full px-2 py-px"><AlertCircle size={11} /> {agent.alerts} open alerts</span>
-                }
-              </div>
-              <div className="flex items-center gap-1 justify-center mt-1">
-                <Clock size={11} color="#94A3B8" />
-                <span className="text-[11px] text-slate-400">Last active: {agent.lastActive}</span>
-              </div>
-              <div className="mt-2.5 border-t border-slate-100 pt-2">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-slate-400">Coverage</span>
-                  <span className={`text-[10px] font-semibold ${agent.health >= 80 ? 'text-[#10B981]' : agent.health >= 50 ? 'text-[#F59E0B]' : 'text-[#EF4444]'}`}>{agent.health}%</span>
-                </div>
-                <div className="h-1 rounded-full bg-slate-100 w-full">
-                  <div className="h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: `${agent.health}%`, backgroundColor: agent.health >= 80 ? '#10B981' : agent.health >= 50 ? '#F59E0B' : '#EF4444' }} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* New Agent card */}
-        <div
-          onClick={() => setShowCreate(true)}
-          className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-5 cursor-pointer text-center flex flex-col items-center justify-center min-h-[180px] transition-all hover:border-sky-500 hover:bg-sky-50"
-        >
-          <div className="w-11 h-11 rounded-full bg-sky-50 flex items-center justify-center mb-2"><Bot size={20} color="#0EA5E9" /></div>
-          <div className="text-[13px] font-semibold text-slate-500">New Agent</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Click to create</div>
-        </div>
-      </div>
-
-      {/* Create modal */}
-      {showCreate && (
-        <CreateAgentModal
-          onClose={() => setShowCreate(false)}
-          onCreated={(a) => { setAgents((prev) => [...prev, a]); toast.success(`Agent "${a.name}" created!`); }}
-        />
-      )}
-
-      {/* Agent Activity feed */}
-      <div className="mt-8">
-        <div className="flex justify-between items-start mb-3">
+      /* Dashboard view */
+      return (
+      <div className="flex flex-col gap-0 max-w-[1200px]">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-6">
           <div>
-            <div className="text-[15px] font-bold text-slate-900">Agent Activity</div>
-            <div className="text-xs text-slate-400 mt-0.5">Live feed of agent actions</div>
+            <h1 className="text-2xl font-bold text-slate-900 m-0">Agents</h1>
+            <p className="text-[13px] text-slate-400 mt-1 mb-0">Monitor and manage your AI agents</p>
           </div>
-          <button onClick={() => toast('Coming soon')} className="text-[13px] text-sky-500 bg-transparent border-none cursor-pointer font-medium">View All</button>
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 bg-sky-500 text-white border-none rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer">
+            <Plus size={16} /> Create Agent
+          </button>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+
+        {/* KPI cards */}
+        <div className="grid grid-cols-4 gap-4 mb-7">
           {[
-            { id: 'a1', name: 'Agent Aria',  seed: 'Aria',  action: 'checked MFA compliance on XYZ Corporation',                 time: '2 min ago',  icon: <CheckCircle2 size={16} color="#10B981" /> },
-            { id: 'a2', name: 'Agent Blake', seed: 'Blake', action: 'raised alert: Call Center Ltd missing data',                 time: '8 min ago',  icon: <AlertCircle size={16} color="#EF4444" /> },
-            { id: 'a3', name: 'Agent Casey', seed: 'Casey', action: 'started backup verification check',                          time: 'just now',   icon: <RefreshCw size={16} color="#F59E0B" className="animate-spin" /> },
-            { id: 'a1', name: 'Agent Aria',  seed: 'Aria',  action: 'document expiry warning: ISO 27001 cert expires in 22 days', time: '15 min ago', icon: <AlertTriangle size={16} color="#F59E0B" /> },
-            { id: 'a2', name: 'Agent Blake', seed: 'Blake', action: 'completed access review policy evaluation',                  time: '1 hr ago',   icon: <CheckCircle2 size={16} color="#10B981" /> },
-          ].map((row, i, arr) => (
-            <div
-              key={i}
-              onClick={() => { const found = agents.find((a) => a.id === row.id); if (found) { setSelectedAgent(found); setView('detail'); } }}
-              className={`flex items-center gap-3 cursor-pointer transition-colors hover:bg-slate-50 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}
-            >
-              <img src={getAvatarUrl(row.seed)} alt={row.name} width={28} height={28} className="rounded-full bg-slate-100 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="m-0 text-[13px] text-slate-700 leading-snug">
-                  <span className="font-semibold text-slate-900">{row.name}</span>{' '}{row.action}
-                </p>
-                <div className="text-[11px] text-slate-400 mt-0.5">{row.time}</div>
+            {
+              label: 'Live', count: liveCount, color: '#10B981',
+              indicator: (
+                <span className="relative inline-flex w-2.5 h-2.5">
+                  <span className="absolute inset-0 rounded-full bg-emerald-500 opacity-50 animate-ping" />
+                  <span className="relative w-2.5 h-2.5 rounded-full bg-emerald-500 block" />
+                </span>
+              ),
+              sub: null,
+            },
+            {
+              label: 'Active', count: activeCount, color: '#0EA5E9',
+              indicator: <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" />,
+              sub: null,
+            },
+            {
+              label: 'Syncing', count: syncingCount, color: '#F59E0B',
+              indicator: <RefreshCw size={14} color="#F59E0B" className="animate-spin" />,
+              sub: null,
+            },
+            {
+              label: 'Open Alerts', count: openAlerts.total, color: '#EF4444',
+              indicator: <AlertCircle size={16} color="#EF4444" />,
+              sub: `${openAlerts.critical} critical \u00B7 ${openAlerts.high} high`,
+            },
+          ].map((kpi) => (
+            <div key={kpi.label} className="bg-white border border-slate-200 rounded-xl shadow-sm py-[18px] px-5" style={{ borderLeft: `4px solid ${kpi.color}` }}>
+              <div className="flex items-center gap-2.5 mb-1">
+                <span className="text-[34px] font-bold text-slate-900">{kpi.count}</span>
+                {kpi.indicator}
               </div>
-              <div className="shrink-0">{row.icon}</div>
+              <div className="text-[13px] text-slate-500">{kpi.label}</div>
+              {kpi.sub && <div className="text-[11px] text-slate-400 mt-0.5">{kpi.sub}</div>}
             </div>
           ))}
         </div>
-      </div>
 
-      <style>{`@keyframes ping{0%,100%{opacity:1}50%{opacity:0.3}} @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-    </div>
-  );
+        {/* Agents heading */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="text-base font-bold text-slate-900">Your Agents</div>
+          <span className="bg-slate-100 text-slate-500 text-xs font-medium rounded-full px-2 py-px">{agents.length}</span>
+        </div>
+
+        {/* Agent cards grid */}
+        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+          {agents.map((agent) => {
+            const [sBg, sClr] = STAGE_CLR[agent.stage];
+            const avatarUrl = getAvatarUrl(agent.avatarSeed || agent.initials);
+            return (
+              <div
+                key={agent.id}
+                onClick={() => { setSelectedAgent(agent); setView('detail'); }}
+                className="bg-white border border-slate-200 rounded-2xl p-5 cursor-pointer text-center transition-all hover:shadow-md hover:border-sky-500 relative group"
+              >
+                <button
+                  onClick={(e) => handleDeleteAgent(agent, e)}
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500"
+                  title="Delete agent"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <div className="flex justify-center mb-3 relative">
+                  <div className="relative">
+                    <img src={avatarUrl} alt={agent.name} width={72} height={72} className="rounded-full block bg-slate-100" style={{ border: `3px solid ${STATUS_CLR[agent.status]}55` }} />
+                    <div className="absolute bottom-px right-px w-[13px] h-[13px] rounded-full border-2 border-white" style={{ backgroundColor: STATUS_CLR[agent.status] }} />
+                  </div>
+                </div>
+                <div className="text-sm font-bold text-slate-900 mb-1.5">{agent.name}</div>
+                {agent.role && <div className="text-[11px] text-slate-400 mb-1.5 leading-snug">{agent.role}</div>}
+                <div className="mb-2"><StatusIndicator status={agent.status} /></div>
+                <span className="text-[10px] font-semibold rounded-full inline-block mb-2 px-2 py-0.5" style={{ backgroundColor: sBg, color: sClr }}>{agent.stage}</span>
+                <div className="text-[11px] text-slate-400">{agent.controls} controls &middot; {agent.suppliers} sup</div>
+                <div className="flex items-center gap-1 justify-center mt-2">
+                  {agent.alerts === 0
+                    ? <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px"><CheckCircle2 size={11} /> No alerts</span>
+                    : <span className="inline-flex items-center gap-1 bg-red-50 text-red-500 text-[11px] rounded-full px-2 py-px"><AlertCircle size={11} /> {agent.alerts} open alerts</span>
+                  }
+                </div>
+                <div className="flex items-center gap-1 justify-center mt-1">
+                  <Clock size={11} color="#94A3B8" />
+                  <span className="text-[11px] text-slate-400">Last active: {agent.lastActive}</span>
+                </div>
+                <div className="mt-2.5 border-t border-slate-100 pt-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] text-slate-400">Coverage</span>
+                    <span className={`text-[10px] font-semibold ${agent.health >= 80 ? 'text-[#10B981]' : agent.health >= 50 ? 'text-[#F59E0B]' : 'text-[#EF4444]'}`}>{agent.health}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-slate-100 w-full">
+                    <div className="h-full rounded-full transition-[width] duration-500 ease-out"
+                      style={{ width: `${agent.health}%`, backgroundColor: agent.health >= 80 ? '#10B981' : agent.health >= 50 ? '#F59E0B' : '#EF4444' }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* New Agent card */}
+          <div
+            onClick={() => setShowCreate(true)}
+            className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-5 cursor-pointer text-center flex flex-col items-center justify-center min-h-[180px] transition-all hover:border-sky-500 hover:bg-sky-50"
+          >
+            <div className="w-11 h-11 rounded-full bg-sky-50 flex items-center justify-center mb-2"><Bot size={20} color="#0EA5E9" /></div>
+            <div className="text-[13px] font-semibold text-slate-500">New Agent</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Click to create</div>
+          </div>
+        </div>
+
+        {/* Create modal */}
+        {showCreate && (
+          <CreateAgentModal
+            onClose={() => setShowCreate(false)}
+            onCreated={(a) => { setAgents((prev) => [...prev, a]); toast.success(`Agent "${a.name}" created!`); }}
+          />
+        )}
+
+        {/* Agent Activity feed */}
+        <div className="mt-8">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <div className="text-[15px] font-bold text-slate-900">Agent Activity</div>
+              <div className="text-xs text-slate-400 mt-0.5">Live feed of agent actions</div>
+            </div>
+            <button onClick={() => toast('Coming soon')} className="text-[13px] text-sky-500 bg-transparent border-none cursor-pointer font-medium">View All</button>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {[
+              { id: 'a1', name: 'Agent Aria', seed: 'Aria', action: 'checked MFA compliance on XYZ Corporation', time: '2 min ago', icon: <CheckCircle2 size={16} color="#10B981" /> },
+              { id: 'a2', name: 'Agent Blake', seed: 'Blake', action: 'raised alert: Call Center Ltd missing data', time: '8 min ago', icon: <AlertCircle size={16} color="#EF4444" /> },
+              { id: 'a3', name: 'Agent Casey', seed: 'Casey', action: 'started backup verification check', time: 'just now', icon: <RefreshCw size={16} color="#F59E0B" className="animate-spin" /> },
+              { id: 'a1', name: 'Agent Aria', seed: 'Aria', action: 'document expiry warning: ISO 27001 cert expires in 22 days', time: '15 min ago', icon: <AlertTriangle size={16} color="#F59E0B" /> },
+              { id: 'a2', name: 'Agent Blake', seed: 'Blake', action: 'completed access review policy evaluation', time: '1 hr ago', icon: <CheckCircle2 size={16} color="#10B981" /> },
+            ].map((row, i, arr) => (
+              <div
+                key={i}
+                onClick={() => { const found = agents.find((a) => a.id === row.id); if (found) { setSelectedAgent(found); setView('detail'); } }}
+                className={`flex items-center gap-3 cursor-pointer transition-colors hover:bg-slate-50 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}
+              >
+                <img src={getAvatarUrl(row.seed)} alt={row.name} width={28} height={28} className="rounded-full bg-slate-100 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="m-0 text-[13px] text-slate-700 leading-snug">
+                    <span className="font-semibold text-slate-900">{row.name}</span>{' '}{row.action}
+                  </p>
+                  <div className="text-[11px] text-slate-400 mt-0.5">{row.time}</div>
+                </div>
+                <div className="shrink-0">{row.icon}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <style>{`@keyframes ping{0%,100%{opacity:1}50%{opacity:0.3}} @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+      );
 }

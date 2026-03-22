@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from .models.user        import User
 from .models.vendor      import Vendor
-from .models.agent       import Agent, AgentTask, AgentLog, AgentTimeline
 from .models.control     import Control
 from .models.risk        import RiskEvent, RiskAction
 from .models.audit_log   import AuditLog
@@ -27,11 +26,6 @@ def seed_all(db: Session) -> None:
         return
     _seed_users(db)
     _seed_vendors(db)
-    _seed_agents(db)
-    _seed_agent_tasks(db)
-    _seed_agent_logs(db)
-    _seed_agent_timeline(db)
-    _seed_controls(db)
     _seed_risks(db)
     _seed_templates(db)
     _seed_library(db)
@@ -71,131 +65,13 @@ def _seed_vendors(db: Session):
 
 # ── Agents ─────────────────────────────────────────────────
 
-def _seed_agents(db: Session):
-    agents = [
-        Agent(id="a1", name="Agent Aria",  initials="A1", status="live",    stage="Acquisition",  controls=4, suppliers=2, gradient="linear-gradient(135deg,#0EA5E9,#6366F1)", alerts=2,  last_active="2 min ago",  health=82, division="Marketing Dept",   frequency="Hourly",     notify=["Risk Manager","Compliance Officer"], internal_spoc="priya@abc.co", external_spoc="john@xyz.com",  truth_match=50,  role="Contract & Process Compliance Specialist", color="#0EA5E9", avatar_seed="Aria",  uptime="99.1%", next_eval="In 45 min",   last_scan="09:14 AM", open_tasks=3, current_task="Auditing SOW signatures and contractual obligation timelines for XYZ Corporation", alert_level="High",    systems=["Email","API","ServiceNow"],   supplier_list=["XYZ Corporation","GHI Technologies"],             control_list=["MFA Enforcement","Privileged Access Mgmt","Vulnerability Scanning"]),
-        Agent(id="a2", name="Agent Blake", initials="A2", status="active",  stage="Retention",    controls=3, suppliers=3, gradient="linear-gradient(135deg,#10B981,#0EA5E9)",  alerts=0,  last_active="8 min ago",  health=94, division="Operations Dept",  frequency="Daily",      notify=["Risk Manager"],                     internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",   truth_match=100, role="SLA & Supplier Process Monitor",          color="#10B981", avatar_seed="Blake", uptime="98.7%", next_eval="In 2 hrs",    last_scan="08:52 AM", open_tasks=1, current_task="Verifying SLA adherence and invoice approval workflows across 3 suppliers",          alert_level="",        systems=["Email","API","Slack"],        supplier_list=["ABC Services Ltd","MNO Partners","STU Analytics"], control_list=["Encryption at Rest","Data Classification Policy"]),
-        Agent(id="a3", name="Agent Casey", initials="A3", status="syncing", stage="Upgradation",  controls=4, suppliers=1, gradient="linear-gradient(135deg,#8B5CF6,#EC4899)",  alerts=3,  last_active="just now",   health=61, division="Technical Dept",   frequency="Every 6hrs", notify=["Risk Manager","DPO","Admin"],        internal_spoc="anita@abc.co", external_spoc="info@def.com",  truth_match=0,   role="Network & Access Review Auditor",         color="#8B5CF6", avatar_seed="Casey", uptime="97.3%", next_eval="In 1 hr",     last_scan="08:30 AM", open_tasks=5, current_task="Running quarterly access review across Active Directory",                            alert_level="High",    systems=["API","ServiceNow"],          supplier_list=["DEF Limited"],                                    control_list=["Access Review Policy","Network Segmentation","Patch Management","Incident Response Plan"]),
-        Agent(id="a4", name="Agent Dana",  initials="A4", status="idle",   stage="Retention",    controls=1, suppliers=2, gradient="linear-gradient(135deg,#F59E0B,#EF4444)",  alerts=0,  last_active="yesterday",  health=100,division="Operations Dept",  frequency="Daily",      notify=["Risk Manager"],                     internal_spoc="raj@abc.co",                                  truth_match=None,role="Backup & Recovery Monitor",               color="#F59E0B", avatar_seed="Dana",  uptime="100%",  next_eval="Tomorrow 02:00",last_scan="Yesterday", open_tasks=0, current_task="Idle — waiting for scheduled trigger at 02:00 UTC",                               alert_level="",        systems=["Email"],                     supplier_list=["JKL Consultancy"],                                control_list=["Backup Verification"]),
-        Agent(id="a5", name="Agent Ellis", initials="A5", status="active", stage="Acquisition",  controls=2, suppliers=1, gradient="linear-gradient(135deg,#EF4444,#EC4899)",  alerts=2,  last_active="5 min ago",  health=88, division="Technical Dept",   frequency="Every 20min",notify=["Risk Manager"],                     internal_spoc="anita@abc.co",                                truth_match=None,role="Vulnerability & Patch Intelligence",       color="#EF4444", avatar_seed="Ellis", uptime="99.8%", next_eval="In 20 min",   last_scan="09:22 AM", open_tasks=2, current_task="Scanning for unpatched CVEs in production environment",                             alert_level="",        systems=["API","Splunk"],              supplier_list=["PQR Systems"],                                    control_list=["Vulnerability Scanning","Patch Management"]),
-    ]
-    db.add_all(agents)
-
-
 # ── Agent Tasks ────────────────────────────────────────────
-
-def _seed_agent_tasks(db: Session):
-    tasks = [
-        # a1 detail view
-        AgentTask(id="t1",  agent_id="a1", view="detail", title="MFA Enrollment — 2 Pending Admin Accounts",         supplier="XYZ Corporation", priority="High",   assignee="priya@abc.co",    status="Open",        due_date="2026-03-07", description="Two admin accounts have not completed MFA enrollment. Breach risk in 4 days."),
-        AgentTask(id="t2",  agent_id="a1", view="detail", title="Critical CVE Patch — CVE-2024-4711",                supplier="GHI Technologies",priority="High",   assignee="anita@abc.co",    status="In Progress", due_date="2026-03-06", description="Critical vulnerability approaching 30-day SLA. Patch available upstream."),
-        AgentTask(id="t3",  agent_id="a1", view="detail", title="Contract Renewal Reminder — XYZ Corp",              supplier="XYZ Corporation", priority="Medium", assignee="",                status="Open",        due_date="2026-03-15", description="Contract expires in 15 days. Procurement to initiate renewal."),
-        # a1 list view
-        AgentTask(id="tl1", agent_id="a1", view="list",   title="SOW Signed After Service Start — XYZ Corporation",  supplier="XYZ Corporation", priority="High",   assignee="priya@abc.co",    status="Open",        due_date="2026-03-07", description="SOW signed Feb 10, but service delivery started Feb 5. Contractual risk — legal review required."),
-        AgentTask(id="tl2", agent_id="a1", view="list",   title="Unapproved Payment of ₹10L — No PO Found",         supplier="XYZ Corporation", priority="High",   assignee="anita@abc.co",    status="In Progress", due_date="2026-03-06", description="₹10L payment detected with no corresponding PO approval in email thread."),
-        AgentTask(id="tl3", agent_id="a1", view="list",   title="ISO 27001 Certificate Renewal — 22 Days Remaining", supplier="XYZ Corporation", priority="Medium", assignee="",                status="Open",        due_date="2026-03-26", description="Certificate expires Mar 26. Supplier to submit renewal proof within 15 days per contract terms."),
-        AgentTask(id="tl4", agent_id="a1", view="list",   title="TPRA Overdue — GHI Technologies",                   supplier="GHI Technologies",priority="High",   assignee="priya@abc.co",    status="Open",        due_date="2026-03-05", description="Annual Third-Party Risk Assessment 3 days overdue. Last score: Medium Risk (48/100)."),
-        # a2 detail
-        AgentTask(id="t4",  agent_id="a2", view="detail", title="Encrypt vm-staging-09",                             supplier="ABC Services Ltd",priority="Medium", assignee="raj@abc.co",      status="In Progress", due_date="2026-03-08", description="New Azure VM created without encryption. Auto-remediation triggered but requires verification."),
-        # a2 list
-        AgentTask(id="tl5", agent_id="a2", view="list",   title="SLA Breach — ABC Services Uptime 98.1% vs 99.5%",  supplier="ABC Services Ltd",priority="High",   assignee="raj@abc.co",      status="In Progress", due_date="2026-03-08", description="SLA breach of 1.4% in Feb 2026. Penalty clause applicable."),
-        AgentTask(id="tl6", agent_id="a2", view="list",   title="MNO Partners Onboarding — 3 Items Missing",        supplier="MNO Partners",    priority="Medium", assignee="raj@abc.co",      status="Open",        due_date="2026-03-12", description="BCP document, cyber insurance cert, and sub-processor list not yet submitted. Checklist at 62%."),
-        AgentTask(id="tl7", agent_id="a2", view="list",   title="DPA Sub-Processor Annex — JKL Consultancy",        supplier="JKL Consultancy", priority="Medium", assignee="",                status="Open",        due_date="2026-03-14", description="DPA missing sub-processor annex per GDPR Article 28(2)."),
-        # a3 detail + list (shared)
-        AgentTask(id="t5",  agent_id="a3", view="detail", title="Revoke Access — 3 Orphaned Accounts",               supplier="DEF Limited",     priority="High",   assignee="it-admin@abc.co", status="In Progress", due_date="2026-03-05", description="Accounts U1042, U1098, U1187 belong to terminated employees with active access."),
-        AgentTask(id="t6",  agent_id="a3", view="detail", title="Patch 3 Servers — Feb 2026 Security Rollup",        supplier="DEF Limited",     priority="High",   assignee="sysadmin@abc.co", status="Open",        due_date="2026-03-10", description="3 servers missing Feb 2026 security rollup. SLA breach in 8 days."),
-        AgentTask(id="t7",  agent_id="a3", view="detail", title="Document Approved VLAN Exceptions",                 supplier="DEF Limited",     priority="Low",    assignee="",                status="Open",        due_date="2026-03-20", description="2 cross-VLAN firewall exceptions approved in ServiceNow. Audit documentation required."),
-        AgentTask(id="t8",  agent_id="a3", view="detail", title="Access Review Sign-off by Dept Heads",              supplier="DEF Limited",     priority="Medium", assignee="hr@abc.co",       status="Open",        due_date="2026-03-12", description="Quarterly access review results require department head sign-off."),
-        AgentTask(id="t9",  agent_id="a3", view="detail", title="Update Insider Threat Runbook",                     supplier="DEF Limited",     priority="Low",    assignee="",                status="Open",        due_date="2026-03-25", description="IR Plan references outdated escalation contacts. Update required."),
-        # a5
-        AgentTask(id="t10", agent_id="a5", view="detail", title="Patch CVE-2024-7821 (CVSS 5.5)",                   supplier="PQR Systems",     priority="Medium", assignee="sysadmin@abc.co", status="In Progress", due_date="2026-03-18", description="18 days remaining in SLA. Patches available upstream. Deployment pending."),
-        AgentTask(id="t11", agent_id="a5", view="detail", title="Patch CVE-2024-6634 (CVSS 6.1)",                   supplier="PQR Systems",     priority="Medium", assignee="sysadmin@abc.co", status="Open",        due_date="2026-03-18", description="18 days remaining in SLA. Patches available upstream."),
-    ]
-    db.add_all(tasks)
-
 
 # ── Agent Logs ─────────────────────────────────────────────
 
-def _seed_agent_logs(db: Session):
-    logs = [
-        AgentLog(id="l1",  agent_id="a1", view="detail", time="09:14 AM", type="fetch",     message="Connecting to API Integration endpoint"),
-        AgentLog(id="l2",  agent_id="a1", view="detail", time="09:13 AM", type="fetch",     message="Pulling MFA status from Active Directory (89 assets)"),
-        AgentLog(id="l3",  agent_id="a1", view="detail", time="09:12 AM", type="evaluate",  message="Running evaluation: MFA Enforcement"),
-        AgentLog(id="l4",  agent_id="a1", view="detail", time="09:11 AM", type="reasoning", message="Analyzing authentication logs across 847 assets", detail="Found 3 admin accounts with MFA disabled. Coverage calculated at 94.2%. Threshold is 90% — currently passing. Flagging 3 accounts for remediation advisory."),
-        AgentLog(id="l5",  agent_id="a1", view="detail", time="09:10 AM", type="success",   message="MFA Enforcement: PASSED — 94% coverage (847 assets)"),
-        AgentLog(id="l6",  agent_id="a1", view="detail", time="09:09 AM", type="action",    message="Advisory email sent: 3 accounts flagged for MFA enrollment"),
-        AgentLog(id="l7",  agent_id="a1", view="detail", time="09:05 AM", type="fetch",     message="Connecting to Splunk SIEM for vulnerability data"),
-        AgentLog(id="l8",  agent_id="a1", view="detail", time="09:04 AM", type="evaluate",  message="Running evaluation: Vulnerability Scanning"),
-        AgentLog(id="l9",  agent_id="a1", view="detail", time="09:03 AM", type="reasoning", message="Parsing Splunk vulnerability index for CVE entries", detail="12 open CVEs detected. 2 Critical (CVSS ≥ 9.0): CVE-2024-4711, CVE-2024-3890. Patch SLA is 30 days — both are 26 days old. Breach in 4 days."),
-        AgentLog(id="l10", agent_id="a1", view="detail", time="09:02 AM", type="warning",   message="Vulnerability Scanning: HIGH RISK — 2 critical CVEs near SLA breach"),
-        AgentLog(id="l11", agent_id="a1", view="detail", time="09:01 AM", type="action",    message="ServiceNow ticket created: VULN-2847 (P1)"),
-        AgentLog(id="l12", agent_id="a1", view="detail", time="09:00 AM", type="action",    message="Email alert dispatched → Risk Manager, Compliance Officer"),
-        # a2
-        AgentLog(id="l13", agent_id="a2", view="detail", time="08:52 AM", type="fetch",     message="Fetching storage inventory from Azure Blob & S3"),
-        AgentLog(id="l14", agent_id="a2", view="detail", time="08:51 AM", type="evaluate",  message="Running evaluation: Encryption at Rest"),
-        AgentLog(id="l15", agent_id="a2", view="detail", time="08:50 AM", type="reasoning", message="Scanning 312 Azure assets for AES-256 encryption status", detail="312 Azure assets checked. 206/312 (66%) encrypted. 106 assets on legacy config — not AES-256. Coverage below 70% threshold."),
-        AgentLog(id="l16", agent_id="a2", view="detail", time="08:49 AM", type="warning",   message="Encryption at Rest: BELOW THRESHOLD — 67% (need 70%)"),
-        AgentLog(id="l17", agent_id="a2", view="detail", time="08:48 AM", type="action",    message="Ticket raised: ENC-1104 — 106 assets require encryption upgrade"),
-        # a3
-        AgentLog(id="l18", agent_id="a3", view="detail", time="08:30 AM", type="fetch",     message="Pulling Active Directory user list (quarterly review cycle)"),
-        AgentLog(id="l19", agent_id="a3", view="detail", time="08:29 AM", type="evaluate",  message="Running evaluation: Access Review Policy"),
-        AgentLog(id="l20", agent_id="a3", view="detail", time="08:28 AM", type="reasoning", message="Cross-referencing AD users against HR offboarding records", detail="1,240 user accounts reviewed. 8 accounts belong to employees terminated in last 90 days. 3 still have active resource access. Immediate revocation required."),
-        AgentLog(id="l21", agent_id="a3", view="detail", time="08:27 AM", type="warning",   message="Access Review: 3 orphaned accounts with active access detected"),
-        AgentLog(id="l22", agent_id="a3", view="detail", time="08:26 AM", type="action",    message="Auto-revocation initiated for accounts: U1042, U1098, U1187"),
-    ]
-    db.add_all(logs)
-
-
 # ── Agent Timeline ─────────────────────────────────────────
 
-def _seed_agent_timeline(db: Session):
-    entries = [
-        AgentTimeline(id="tl1",  agent_id="a1", view="detail", time="09:14 AM", event="MFA audit completed — 94.5% coverage across 847 assets",                         status="success"),
-        AgentTimeline(id="tl2",  agent_id="a1", view="detail", time="09:08 AM", event="ServiceNow ticket VULN-2847 auto-created for critical CVE patch",                 status="alert"),
-        AgentTimeline(id="tl3",  agent_id="a1", view="detail", time="09:05 AM", event="Email dispatched to Risk Manager & Compliance Officer re: CVE breach risk",       status="warning"),
-        AgentTimeline(id="tl4",  agent_id="a1", view="detail", time="08:55 AM", event="JIT access session audit completed — 14 sessions, 0 standing access",             status="success"),
-        AgentTimeline(id="tl5",  agent_id="a1", view="detail", time="08:40 AM", event="Supplier XYZ Corporation contract expiry flagged — 15 days remaining",            status="warning"),
-        AgentTimeline(id="tl6",  agent_id="a1", view="detail", time="08:20 AM", event="MFA enrollment advisory sent to 3 non-compliant admin accounts",                  status="info"),
-        AgentTimeline(id="tl7",  agent_id="a2", view="detail", time="08:52 AM", event="Auto-remediation applied: vm-staging-09 encryption policy enforced",              status="success"),
-        AgentTimeline(id="tl8",  agent_id="a2", view="detail", time="08:48 AM", event="Unencrypted Azure VM detected: vm-staging-09",                                    status="alert"),
-        AgentTimeline(id="tl9",  agent_id="a2", view="detail", time="08:35 AM", event="Data classification audit: 91% M365 assets labelled (156 total)",                 status="success"),
-        AgentTimeline(id="tl10", agent_id="a3", view="detail", time="08:30 AM", event="Orphaned account revocation initiated — U1042, U1098, U1187",                     status="alert"),
-        AgentTimeline(id="tl11", agent_id="a3", view="detail", time="08:25 AM", event="PATCH-3319 escalated to P1 — 3 servers missing Feb 2026 rollup",                  status="warning"),
-        AgentTimeline(id="tl12", agent_id="a3", view="detail", time="08:10 AM", event="Network segmentation confirmed — VLAN 10/20 isolation verified",                  status="success"),
-        AgentTimeline(id="tl13", agent_id="a4", view="detail", time="02:04 AM", event="Backup verification complete — 14/14 snapshots validated",                        status="success"),
-        AgentTimeline(id="tl14", agent_id="a4", view="detail", time="02:02 AM", event="Restore test confirmed — 4.2 hrs (within 6 hr SLA)",                              status="success"),
-        AgentTimeline(id="tl15", agent_id="a5", view="detail", time="09:22 AM", event="No new CVEs detected in latest Splunk scan (650 endpoints)",                      status="success"),
-        AgentTimeline(id="tl16", agent_id="a5", view="detail", time="09:18 AM", event="Ticket VULN-2851 updated — CVE-2024-7821 & CVE-2024-6634 still unpatched",        status="warning"),
-    ]
-    db.add_all(entries)
-
-
 # ── Controls ───────────────────────────────────────────────
-
-def _seed_controls(db: Session):
-    controls = [
-        Control(id="p1",  name="SLA Adherence Policy",            desc="Monitor supplier uptime vs contracted SLA thresholds",                       category="Process",  active=True,  coverage=91, scope="Full",    risk="High",     last_eval="8 min ago",  deps=2, internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",  pii_flow="ingest", truth_validator=True,  has_truth_gap=False, personality="Operations"),
-        Control(id="p2",  name="Invoice Approval Workflow",        desc="Verify every payment has a corresponding approved PO",                        category="Process",  active=True,  coverage=78, scope="Partial", risk="Critical", last_eval="15 min ago", deps=3, internal_spoc="priya@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=True,  personality="Consulting"),
-        Control(id="p3",  name="Supplier Onboarding Checklist",    desc="Ensure all onboarding items completed before go-live",                        category="Process",  active=True,  coverage=62, scope="Partial", risk="High",     last_eval="30 min ago", deps=1, internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",  pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Operations"),
-        Control(id="p4",  name="Contractual Obligation Review",    desc="Track active obligations and flag overdue deliverables",                      category="Process",  active=True,  coverage=85, scope="Full",    risk="Critical", last_eval="2 min ago",  deps=4, internal_spoc="priya@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=True,  personality="Consulting"),
-        Control(id="p5",  name="Access Revocation on Exit",        desc="Remove all access within 24hrs of supplier staff offboarding",               category="Process",  active=True,  coverage=88, scope="Full",    risk="High",     last_eval="1 hr ago",   deps=2, internal_spoc="anita@abc.co", external_spoc="info@def.com", pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Security"),
-        Control(id="p6",  name="Third-Party Risk Assessment",      desc="Annual TPRA due date monitoring and escalation",                             category="Process",  active=True,  coverage=74, scope="Partial", risk="High",     last_eval="45 min ago", deps=2, internal_spoc="priya@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=False, personality="Consulting"),
-        Control(id="p7",  name="Patch Management SLA",             desc="OS patching within 30-day SLA window",                                       category="Process",  active=False, coverage=72, scope="Partial", risk="Medium",   last_eval="2 hrs ago",  deps=2, internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",  pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Operations"),
-        Control(id="p8",  name="Quarterly Access Review",          desc="Review all active user accounts every 90 days",                              category="Process",  active=True,  coverage=88, scope="Full",    risk="Medium",   last_eval="1 hr ago",   deps=1, internal_spoc="raj@abc.co",   external_spoc="john@xyz.com", pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Consulting"),
-        Control(id="p9",  name="Escalation Response Time",         desc="Critical alerts must be acknowledged within 2 hours",                        category="Process",  active=True,  coverage=94, scope="Full",    risk="Critical", last_eval="5 min ago",  deps=3, internal_spoc="anita@abc.co", external_spoc="ops@abc.com",  pii_flow="both",   truth_validator=True,  has_truth_gap=False, personality="Operations"),
-        Control(id="p10", name="Change Management Process",        desc="All system changes require approved change request",                          category="Process",  active=True,  coverage=81, scope="Full",    risk="Medium",   last_eval="3 hrs ago",  deps=2, internal_spoc="raj@abc.co",   external_spoc="info@def.com", pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Operations"),
-        Control(id="d1",  name="SOW Signature Verification",       desc="SOW must be signed before service delivery commences",                        category="Document", active=True,  coverage=83, scope="Full",    risk="Critical", last_eval="10 min ago", deps=3, internal_spoc="priya@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=True,  personality="Consulting"),
-        Control(id="d2",  name="ISO 27001 Certificate Review",     desc="Track cert validity and trigger renewal 30 days before expiry",              category="Document", active=True,  coverage=91, scope="Full",    risk="High",     last_eval="20 min ago", deps=1, internal_spoc="anita@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=False, personality="Regulatory"),
-        Control(id="d3",  name="Data Processing Agreement (DPA)",  desc="GDPR Art. 28 DPA in place with all data processors",                         category="Document", active=True,  coverage=79, scope="Partial", risk="Critical", last_eval="1 hr ago",   deps=2, internal_spoc="anita@abc.co", external_spoc="ops@abc.com",  pii_flow="both",   truth_validator=True,  has_truth_gap=True,  personality="Regulatory"),
-        Control(id="t1",  name="MFA Enforcement",                  desc="All supplier-facing accounts must use multi-factor authentication",           category="Technical",active=True,  coverage=94, scope="Full",    risk="Critical", last_eval="5 min ago",  deps=2, internal_spoc="anita@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=False, personality="Security"),
-        Control(id="t2",  name="Encryption at Rest",               desc="All supplier data stores must be AES-256 encrypted",                         category="Technical",active=True,  coverage=67, scope="Partial", risk="High",     last_eval="8 min ago",  deps=3, internal_spoc="anita@abc.co", external_spoc="info@def.com", pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Security"),
-        Control(id="t3",  name="Data Classification Policy",       desc="All M365 and cloud assets must carry approved classification labels",         category="Technical",active=True,  coverage=91, scope="Full",    risk="Medium",   last_eval="8 min ago",  deps=1, internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",  pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Operations"),
-        Control(id="t4",  name="Vulnerability Scan Cadence",       desc="Weekly automated vulnerability scans on all supplier-connected systems",      category="Technical",active=True,  coverage=88, scope="Full",    risk="High",     last_eval="20 min ago", deps=2, internal_spoc="anita@abc.co", external_spoc="john@xyz.com", pii_flow="share",  truth_validator=True,  has_truth_gap=False, personality="Security"),
-        Control(id="t5",  name="Access Review Policy",             desc="Quarterly review of all user access rights across supplier systems",          category="Technical",active=True,  coverage=88, scope="Full",    risk="Medium",   last_eval="30 min ago", deps=2, internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",  pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Operations"),
-        Control(id="t6",  name="Backup Verification",              desc="Daily backup integrity checks with monthly restore tests",                    category="Technical",active=True,  coverage=100,scope="Full",    risk="Medium",   last_eval="2 hrs ago",  deps=1, internal_spoc="raj@abc.co",   external_spoc="ops@abc.com",  pii_flow="ingest", truth_validator=False, has_truth_gap=False, personality="Operations"),
-    ]
-    db.add_all(controls)
-
 
 # ── Risk Events ────────────────────────────────────────────
 

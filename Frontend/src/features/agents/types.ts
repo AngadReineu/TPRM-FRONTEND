@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskStatus, Stage } from '@/types/shared';
+import type { TaskPriority, TaskStatus, Stage } from '../../types/shared';
 
 /* ── Agent-specific types ────────────────────────────── */
 
@@ -58,6 +58,15 @@ export interface Agent {
   internalSpoc?: string;
   externalSpoc?: string;
   truthMatch?: number;
+  slmTemplate?: string;
+  jobTitle?: string;
+  jobDescription?: string;
+  internalContacts?: string[];
+  supplierContacts?: string[];
+  pendingContacts?: string[];
+  controlList?: string[];
+  supplierList?: string[];
+  alertLevel?: string;
   /* enriched fields for detail page */
   agentName?: string;
   role?: string;
