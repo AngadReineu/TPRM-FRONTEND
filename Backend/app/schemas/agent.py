@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List, Any
+from datetime import datetime
 
 
 class AgentCreate(BaseModel):
@@ -101,11 +102,14 @@ class AgentTaskResponse(BaseModel):
 class AgentLogResponse(BaseModel):
     id: str
     agent_id: str
+    run_id: Optional[str] = None
+    run_date: Optional[str] = None
     view: str
     time: str
     type: str
     message: str
     detail: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

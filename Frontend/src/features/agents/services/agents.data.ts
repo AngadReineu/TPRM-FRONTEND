@@ -687,6 +687,14 @@ export async function runAgent(id: string): Promise<{status: string; agentId: st
   return toCamelCase<{status: string; agentId: string}>(response);
 }
 
+/**
+ * Stop a running agent manually via API.
+ */
+export async function stopAgent(id: string): Promise<{status: string; agentId: string}> {
+  const response = await api.post<unknown>(`/agents/${id}/stop`, {});
+  return toCamelCase<{status: string; agentId: string}>(response);
+}
+
 // export async function getAgentReport(id: string): Promise<{report: string}> {
 //   return await api.get<{report: string}>(`/agents/${id}/report`);
 // }

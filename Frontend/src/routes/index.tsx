@@ -22,6 +22,7 @@ import { TemplatesPage }         from '../features/templates/pages/TemplatesPage
 
 // Supplier portal — public route, no auth required
 import { SupplierPortalPage }    from '../features/portal/pages/SupplierPortalPage';
+import { AgentLogsPage } from '../features/agents/pages/AgentLogPage';
 
 function NotFound() {
   return (
@@ -59,7 +60,9 @@ export const router = createBrowserRouter([
       { path: 'controls/create',       Component: CreateControlPage },
       { path: 'controls/:id',          Component: ViewControlPage },
       { path: 'agents',                Component: AgentsPage },
+      { path: 'agents/logs',           Component: AgentLogsPage },
       { path: 'agents/:id',            Component: AgentDetailPage },
+      { path: 'agents/:id/logs',       Component: AgentLogsPage },
       { path: 'libraries',             Component: LibraryPage },
       { path: 'libraries/healthcare',  Component: LibraryHealthcarePage },
       { path: 'tprm',                  Component: VendorsPage },

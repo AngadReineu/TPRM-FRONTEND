@@ -64,6 +64,8 @@ class AgentLog(Base):
 
     id          = Column(String, primary_key=True, index=True)
     agent_id    = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
+    run_id      = Column(String,nullable=True, index=True)
+    run_date    = Column(String,nullable=True)
     view        = Column(String, default="detail")        # list | detail
     time        = Column(String, nullable=False)
     type        = Column(String, nullable=False)          # fetch | evaluate | reasoning | success | warning | action | decision | error

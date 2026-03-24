@@ -1,15 +1,16 @@
 import { NavLink, useNavigate } from 'react-router';
 import { useState, useEffect } from 'react';
 import { cn } from '../../lib/utils';
-import { useAuthStore } from '@/stores/authStore';
-import { getAgents } from '@/features/agents/services/agents.data';
-import type { Agent } from '@/features/agents/types';
+import { useAuthStore } from '../../stores/authStore';
+import { getAgents } from '../../features/agents/services/agents.data';
+import type { Agent } from '../../features/agents/types';
 import {
   LayoutDashboard, ScanLine, ShieldCheck, AlertCircle, Scan,
   FolderOpen, ClipboardList, Database, BookOpen, AlertTriangle,
   Bot, Plus, Sliders, Compass, UserCog, ExternalLink,
-  Settings, LogOut, ChevronUp, ChevronDown, LayoutTemplate,
+  Settings, LogOut, ChevronUp, ChevronDown, LayoutTemplate, FileText,
 } from 'lucide-react';
+import { AgentLogsPage } from '../../features/agents/pages/AgentLogPage';
 
 /* ── Item class helper ───────────────────────────────── */
 function itemClass(isActive = false, indent = false, sub = false) {
@@ -227,8 +228,10 @@ export function Sidebar() {
                 +{agents.length - 5} more agents...
               </div>
             )}
+            
 
             {/* Controls */}
+            <FuncItem icon={FileText} label="Agent Logs" to="/agents/logs" indent />
             <FuncItem icon={Sliders} label="Controls" to="/controls" indent />
             <FuncItem icon={LayoutTemplate} label="Templates" to="/templates" indent />
           </div>
