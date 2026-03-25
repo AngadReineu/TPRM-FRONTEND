@@ -24,6 +24,7 @@ export interface Control {
 
   // Step 3 — Data Source
   dataSources?: string[];            // ["email", "documents", "portal"]
+  dataSourcesConfig?: Record<string, any>; // {"teams": {...}, "slack": {...}, "zoom": {...}}
   evidenceRetention?: string;        // 30d | 90d | 1y | 7y
 
   // Step 4 — Trigger Config

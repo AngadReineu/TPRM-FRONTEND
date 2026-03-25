@@ -70,3 +70,14 @@ class Control(Base):
 
     created_at           = Column(DateTime(timezone=True), server_default=func.now())
     updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
+
+class ControlDocument(Base):
+    __tablename__ = "control_documents"
+
+    id          = Column(String, primary_key=True)
+    control_id  = Column(String, nullable=False)
+    filename    = Column(String, nullable=False)
+    file_path   = Column(String, nullable=False)
+    doc_type    = Column(String, nullable=False)  # SOW, PO, Invoice, SLA, Contract, NDA, DPA, Other
+    uploaded_at = Column(DateTime, default=func.now())
+    file_size   = Column(Integer, nullable=True)

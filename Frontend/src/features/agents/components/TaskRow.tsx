@@ -11,13 +11,13 @@ export function TaskRow({ task, agentColor }: { task: AgentTask; agentColor: str
     High:   { color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
     Medium: { color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
     Low:    { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
-  }[task.priority];
+  }[task.priority || 'Medium'] || { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
 
   const statusCfg = {
     Open:          { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' },
     'In Progress': { color: '#0EA5E9', bg: '#EFF6FF', border: '#BAE6FD' },
     Resolved:      { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
-  }[localStatus];
+  }[localStatus || 'Open'] || { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
 
   return (
     <div className="border border-slate-200 rounded-[10px] bg-white mb-2.5 py-3.5 px-4">

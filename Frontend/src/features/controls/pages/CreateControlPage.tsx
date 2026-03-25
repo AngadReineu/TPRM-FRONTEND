@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import {
   ArrowLeft, Check, Loader2, CheckCircle2, X,
   Handshake, Truck, ShieldCheck, Scale,
-  GitMerge, Plus, Mail, FileText, Globe,
+  GitMerge, Plus, Mail, FileText, Globe, MessageSquare, Hash, Video,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { StepperBar } from '../components/StepperBar';
 import { createControl } from '../services/controls.data';
 import { getVendors } from '../../vendors/services/vendors.data';
+import { useAuthStore } from '../../../stores/authStore';
 
 /* ── Constants ─────────────────────────────────────────── */
 const STEPS = [
@@ -325,7 +326,7 @@ function Step1({ form, setForm }: { form: any; setForm: any }) {
 }
 
 /* ── Step 2 — Target Asset Scope ────────────────────────── */
-function Step2({ form, setForm }: { form: any; setForm: any }) {
+function Step2({ form, setForm, pendingDocs, setPendingDocs }: { form: any; setForm: any; pendingDocs?: {file: File, docType: string}[]; setPendingDocs?: any }) {
   const [vendors, setVendors] = useState<{ id: string; name: string }[]>([]);
   const isConsulting = form.personality === 'consulting' || form.personality === 'operations';
 
@@ -440,7 +441,7 @@ function Step2({ form, setForm }: { form: any; setForm: any }) {
             <div className="w-[3px] h-3.5 rounded bg-amber-500" />
             <label className="text-[13px] font-bold text-slate-900">Document Scope</label>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-4">
             {DOCUMENT_SCOPE_OPTIONS.map(doc => {
               const sel = (form.documentScope || []).includes(doc);
               return (
@@ -454,6 +455,49 @@ function Step2({ form, setForm }: { form: any; setForm: any }) {
               );
             })}
           </div>
+          
+          {(form.documentScope || []).length > 0 && (
+            <div className="flex flex-col gap-3">
+              {(form.documentScope || []).map((docType: string) => {
+                const existing = pendingDocs?.find((p: any) => p.docType === docType);
+                return (
+                  <div key={'upload-'+docType} className="border border-dashed border-slate-300 rounded-lg p-3.5 bg-slate-50 relative flex justify-between items-center">
+                    <div className="text-[12px] font-bold text-slate-700">{docType} Document</div>
+                    {existing ? (
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 overflow-hidden bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-sm">
+                          <FileText size={14} className="text-red-500 shrink-0" />
+                          <span className="text-xs text-slate-700 truncate max-w-[150px]">{existing.file.name}</span>
+                        </div>
+                        <button onClick={() => setPendingDocs?.((p: any) => p.filter((x: any) => x.docType !== docType))} 
+                          className="bg-white border text-red-500 border-red-200 rounded px-2.5 py-1.5 text-xs font-semibold cursor-pointer hover:bg-red-50 shrink-0 shadow-sm transition-colors">
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <label className="bg-white border border-slate-200 text-slate-700 text-xs px-3.5 py-1.5 rounded-md cursor-pointer hover:bg-slate-50 font-semibold shadow-sm transition-colors">
+                          Upload PDF
+                          <input type="file" accept=".pdf,application/pdf" className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                                  toast.error('Only PDF files are allowed');
+                                  return;
+                                }
+                                setPendingDocs?.((p: any) => [...p.filter((x: any) => x.docType !== docType), { file, docType }]);
+                              }
+                            }} 
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -498,17 +542,25 @@ function Step3({ form, setForm }: { form: any; setForm: any }) {
   const RETENTION_OPTIONS = ['30 days', '90 days', '1 year', '7 years'];
 
   const consultingSources = [
-    { id: 'email', label: 'Email Monitoring', desc: 'Read supplier SPOC email threads for anomaly detection', Icon: Mail, locked: true },
-    { id: 'documents', label: 'Uploaded Documents', desc: 'Compare original uploaded docs (SOW, PO, Invoice) against email evidence', Icon: FileText, locked: true },
-    { id: 'portal', label: 'Supplier Portal', desc: 'Assessment responses submitted by the supplier', Icon: Globe, locked: false },
+    { id: 'email', label: 'Email Monitoring', desc: 'Read supplier SPOC email threads for anomaly detection', Icon: Mail, locked: false, comingSoon: false },
+    { id: 'documents', label: 'Uploaded Documents', desc: 'Compare original uploaded docs (SOW, PO, Invoice) against email evidence', Icon: FileText, locked: false, comingSoon: false },
+    { id: 'portal', label: 'Supplier Portal', desc: 'Assessment responses submitted by the supplier', Icon: Globe, locked: false, comingSoon: false },
+    { id: 'teams', label: 'Microsoft Teams', desc: 'Monitor Teams channels and direct messages', Icon: MessageSquare, locked: false, comingSoon: false },
+    { id: 'slack', label: 'Slack', desc: 'Monitor Slack channels and DMs', Icon: Hash, locked: false, comingSoon: false },
+    { id: 'zoom', label: 'Zoom', desc: 'Analyze meeting transcripts and chat', Icon: Video, locked: false, comingSoon: false },
   ];
 
   const itRiskSources = [
-    { id: 'documents', label: 'Uploaded Documents', desc: 'Policy documents, certificates, technical evidence', Icon: FileText, locked: true },
-    { id: 'portal', label: 'Supplier Portal', desc: 'Assessment responses submitted by the supplier', Icon: Globe, locked: false },
+    { id: 'documents', label: 'Uploaded Documents', desc: 'Policy documents, certificates, technical evidence', Icon: FileText, locked: false, comingSoon: false },
+    { id: 'portal', label: 'Supplier Portal', desc: 'Assessment responses submitted by the supplier', Icon: Globe, locked: false, comingSoon: false },
+    { id: 'teams', label: 'Microsoft Teams', desc: 'Monitor Teams channels and direct messages', Icon: MessageSquare, locked: false, comingSoon: false },
+    { id: 'slack', label: 'Slack', desc: 'Monitor Slack channels and DMs', Icon: Hash, locked: false, comingSoon: false },
+    { id: 'zoom', label: 'Zoom', desc: 'Analyze meeting transcripts and chat', Icon: Video, locked: false, comingSoon: false },
   ];
 
   const sources = isConsulting ? consultingSources : itRiskSources;
+
+  const [showZoomSecret, setShowZoomSecret] = useState(false);
 
   const toggleSource = (id: string) => {
     const current: string[] = form.dataSources || [];
@@ -516,41 +568,118 @@ function Step3({ form, setForm }: { form: any; setForm: any }) {
     setForm({ ...form, dataSources: updated });
   };
 
-  // Pre-tick locked sources
-  useEffect(() => {
-    const locked = sources.filter(s => s.locked).map(s => s.id);
-    const current: string[] = form.dataSources || [];
-    const merged = Array.from(new Set([...locked, ...current]));
-    if (JSON.stringify(merged) !== JSON.stringify(current)) {
-      setForm((f: any) => ({ ...f, dataSources: merged }));
-    }
-  }, [form.personality]);
+
 
   return (
     <div>
       <div className="mb-6">
         <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Data Sources</label>
         <div className="flex flex-col gap-2">
-          {sources.map(({ id, label, desc, Icon, locked }) => {
-            const sel = (form.dataSources || []).includes(id) || locked;
+          {sources.map(({ id, label, desc, Icon, locked, comingSoon }) => {
+            const sel = (form.dataSources || []).includes(id);
             return (
-              <div key={id} onClick={() => !locked && toggleSource(id)}
-                className={`flex items-center gap-3 px-3.5 py-3 rounded-lg border transition-all ${locked ? 'cursor-default' : 'cursor-pointer'}`}
-                style={{ backgroundColor: sel ? '#EFF6FF' : '#fff', border: sel ? '1px solid #0EA5E9' : '1px solid #E2E8F0' }}>
-                <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center"
-                  style={{ border: sel ? '2px solid #0EA5E9' : '2px solid #CBD5E1', backgroundColor: sel ? '#0EA5E9' : '#fff' }}>
-                  {sel && <Check size={10} color="#fff" strokeWidth={3} />}
-                </div>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 shrink-0">
-                  <Icon size={15} color="#0EA5E9" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-semibold text-slate-700">{label}</span>
-                    {locked && <span className="text-[10px] font-semibold text-sky-500 bg-blue-50 px-2 py-px rounded-full">Required</span>}
+              <div key={id} className="flex flex-col gap-2">
+                <div onClick={() => !locked && toggleSource(id)}
+                  className={`flex items-center gap-3 px-3.5 py-3 rounded-lg border transition-all ${locked ? 'cursor-default' : 'cursor-pointer'}`}
+                  style={{ backgroundColor: sel ? '#EFF6FF' : '#fff', border: sel ? '1px solid #0EA5E9' : '1px solid #E2E8F0' }}>
+                  <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center"
+                    style={{ border: sel ? '2px solid #0EA5E9' : '2px solid #CBD5E1', backgroundColor: sel ? '#0EA5E9' : '#fff' }}>
+                    {sel && <Check size={10} color="#fff" strokeWidth={3} />}
                   </div>
-                  <div className="text-xs text-slate-400 mt-px">{desc}</div>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 shrink-0">
+                    <Icon size={15} color="#0EA5E9" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-slate-700">{label}</span>
+                      {comingSoon && <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-px rounded-full border border-amber-200">Coming Soon</span>}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-px">{desc}</div>
+                  </div>
                 </div>
+
+                {/* Conditional configurations based on data source */}
+                
+                {sel && id === 'teams' && (
+                  <div className="ml-9 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Azure Tenant ID</label>
+                        <input className={INPUT_CLS} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value={form.teamsTenantId || ''} onChange={e => setForm({...form, teamsTenantId: e.target.value})} />
+                        <div className="text-[10px] text-slate-400 mt-1">Your Azure AD tenant ID — found in Azure portal app registration</div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Search Scope</label>
+                        <div className="flex gap-4 mb-2">
+                          <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" checked={form.teamsScope === 'all' || !form.teamsScope} onChange={() => setForm({...form, teamsScope: 'all'})} /> All teams and channels
+                          </label>
+                          <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" checked={form.teamsScope === 'specific'} onChange={() => setForm({...form, teamsScope: 'specific'})} /> Specific channels only
+                          </label>
+                        </div>
+                        {form.teamsScope === 'specific' && (
+                          <input className={INPUT_CLS} placeholder="general, supplier-reviews, finance" value={form.teamsChannels || ''} onChange={e => setForm({...form, teamsChannels: e.target.value})} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {sel && id === 'slack' && (
+                  <div className="ml-9 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Bot Token</label>
+                        <input className={INPUT_CLS} placeholder="xoxb-..." value={form.slackBotToken || ''} onChange={e => setForm({...form, slackBotToken: e.target.value})} />
+                        <div className="text-[10px] text-slate-400 mt-1">Install your Slack app and copy the Bot User OAuth Token</div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Workspace</label>
+                        <input className={INPUT_CLS} placeholder="yourcompany" value={form.slackWorkspaceUrl || ''} onChange={e => setForm({...form, slackWorkspaceUrl: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Search Scope</label>
+                        <div className="flex gap-4 mb-2">
+                          <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" checked={form.slackScope === 'all' || !form.slackScope} onChange={() => setForm({...form, slackScope: 'all'})} /> All channels bot is invited to
+                          </label>
+                          <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" checked={form.slackScope === 'specific'} onChange={() => setForm({...form, slackScope: 'specific'})} /> Specific channels only
+                          </label>
+                        </div>
+                        {form.slackScope === 'specific' && (
+                          <input className={INPUT_CLS} placeholder="#general, #supplier-comms" value={form.slackChannels || ''} onChange={e => setForm({...form, slackChannels: e.target.value})} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {sel && id === 'zoom' && (
+                  <div className="ml-9 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-0.5">Account ID</label>
+                        <input className={INPUT_CLS} placeholder="your-zoom-account-id" value={form.zoomAccountId || ''} onChange={e => setForm({...form, zoomAccountId: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-0.5">Client ID</label>
+                        <input className={INPUT_CLS} placeholder="your-zoom-client-id" value={form.zoomClientId || ''} onChange={e => setForm({...form, zoomClientId: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-0.5">Client Secret</label>
+                        <div className="relative">
+                          <input type={showZoomSecret ? 'text' : 'password'} className={INPUT_CLS} placeholder="your-zoom-client-secret" value={form.zoomClientSecret || ''} onChange={e => setForm({...form, zoomClientSecret: e.target.value})} />
+                          <button type="button" onClick={() => setShowZoomSecret(!showZoomSecret)} className="absolute right-3 top-2.5 text-xs text-slate-400 font-semibold cursor-pointer">
+                            {showZoomSecret ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-amber-700 bg-amber-50 px-2 py-1.5 rounded border border-amber-200 mt-1">Note: Zoom transcripts require cloud recording and audio transcription to be enabled in your Zoom account settings</div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -730,11 +859,89 @@ function Step5({ form, setForm }: { form: any; setForm: any }) {
   useEffect(() => {
     if (form.slmTasks?.length > 0 && !form.evaluationPromptEdited) {
       const persona = form.personality === 'consulting' ? 'Consulting' : 'Operations';
-      const taskList = form.slmTasks.join(', ');
-      const prompt = `You are a ${persona} Agent monitoring a supplier relationship. Review the email thread and uploaded documents for this supplier. Check for the following: ${taskList}. Flag any discrepancy between the original uploaded reference documents and what is referenced in the email thread. Report findings with severity level and recommended action.`;
+      const taskList = form.slmTasks.map((t: string, i: number) => `${i + 1}. ${t}`).join('\\n');
+
+      const prompt = `You are a ${persona} Agent responsible for monitoring a supplier relationship in a Third Party Risk Management (TPRM) system.
+
+Your role is to analyze all available data sources and identify compliance issues, operational risks, and any signs of unethical or fraudulent behavior.
+
+You are provided with:
+- Email threads between internal stakeholders and the supplier
+- Uploaded reference documents (contracts, SOW, PO, invoices, SLA, etc.)
+- Slack messages
+- Microsoft Teams conversations
+- Zoom meeting transcripts
+
+---
+
+TASK OBJECTIVE:
+Evaluate the supplier’s activities based on the following tasks:
+${taskList}
+
+---
+
+ANALYSIS INSTRUCTIONS:
+
+1. Cross-Source Validation  
+Compare all communications (email, Slack, Teams, Zoom) with reference documents.  
+Identify discrepancies, inconsistencies, or missing information.
+
+2. Task-Oriented Evaluation  
+Focus on the assigned tasks listed above and determine whether the supplier’s actions align with expectations.
+
+3. Compliance & Governance Review  
+Identify violations of processes, missing approvals, undocumented decisions, or workflow bypasses.
+
+4. Financial & Transaction Risk (if applicable)  
+Detect anomalies in invoices, payments, pricing, or bank details.
+
+5. Contractual & Documentation Integrity  
+Ensure all actions align with formal agreements (SOW, contracts, SLA, policies).  
+Flag any activity occurring without proper documentation.
+
+6. Communication Risk Analysis  
+Analyze tone, intent, and context across all channels.  
+Pay special attention to informal communication (Slack, Teams, Zoom).
+
+7. Fraud & Ethical Risk Detection (CRITICAL)  
+Detect:
+- manipulation of invoices or payments  
+- attempts to hide financial changes  
+- collusion between internal staff and supplier  
+- requests to keep decisions secret  
+- intent to gain unauthorized financial benefit  
+
+Flag intent-based risks even if no document discrepancy exists.
+
+8. Implicit Risk Detection  
+Even if no explicit violation is found, identify suspicious patterns, unusual behavior, or early warning signals.
+
+---
+
+OUTPUT FORMAT:
+
+FINDINGS:
+- key observations with source (Email / Slack / Teams / Zoom / Document)
+
+DISCREPANCIES:
+- mismatches between documents and communication
+
+RISK LEVEL:
+- Low / Medium / High / Critical
+
+RECOMMENDED ACTION:
+- clear, actionable next steps
+
+---
+
+IMPORTANT:
+- prioritize high-risk issues  
+- be evidence-based  
+- escalate fraud or unethical intent to Critical`;
+
       setForm((f: any) => ({ ...f, evaluationPrompt: prompt }));
     }
-  }, [form.slmTasks, form.personality]);
+  }, [form.slmTasks, form.personality, form.evaluationPromptEdited]);
 
   // Auto-generate remediation suggestion
   useEffect(() => {
@@ -884,12 +1091,13 @@ export function CreateControlPage() {
   const [step, setStep] = useState(1);
   const [isActivating, setIsActivating] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [pendingDocs, setPendingDocs] = useState<{file: File, docType: string}[]>([]);
   const [form, setForm] = useState<any>({
     name: '', description: '', source: 'local', grcProvider: '',
     personality: '', category: 'Process', risk: 'High',
     slmTasks: [],
     supplierScope: [], lifecycleStage: '', communicationScope: {}, documentScope: [],
-    dataSources: ['email', 'documents'], evidenceRetention: '90 days',
+    dataSources: [], evidenceRetention: '90 days',
     triggerMode: 'event', triggerEvents: [], triggerFrequency: 'Daily',
     firstEvalDate: '', firstEvalTime: '',
     evaluationPrompt: '', anomalyTriggers: [], confidenceThreshold: 75,
@@ -902,7 +1110,31 @@ export function CreateControlPage() {
   const handleActivate = async () => {
     setIsActivating(true);
     try {
-      await createControl({
+      const dataSourcesConfig: any = {};
+      if (form.dataSources?.includes('teams')) {
+        dataSourcesConfig.teams = {
+          tenant_id: form.teamsTenantId,
+          scope: form.teamsScope || 'all',
+          channels: form.teamsScope === 'specific' ? form.teamsChannels : null
+        };
+      }
+      if (form.dataSources?.includes('slack')) {
+        dataSourcesConfig.slack = {
+          bot_token: form.slackBotToken,
+          workspace: form.slackWorkspaceUrl,
+          scope: form.slackScope || 'all',
+          channels: form.slackScope === 'specific' ? form.slackChannels : null
+        };
+      }
+      if (form.dataSources?.includes('zoom')) {
+        dataSourcesConfig.zoom = {
+          account_id: form.zoomAccountId,
+          client_id: form.zoomClientId,
+          client_secret: form.zoomClientSecret
+        };
+      }
+
+      const newControl = await createControl({
         name: form.name.trim(),
         desc: form.description.trim(),
         category: form.category,
@@ -916,6 +1148,7 @@ export function CreateControlPage() {
         communicationScope: form.communicationScope || {},
         documentScope: form.documentScope || [],
         dataSources: form.dataSources || [],
+        dataSourcesConfig: Object.keys(dataSourcesConfig).length > 0 ? dataSourcesConfig : undefined,
         evidenceRetention: form.evidenceRetention || '90d',
         triggerMode: form.triggerMode || 'event',
         triggerEvents: form.triggerEvents || [],
@@ -930,12 +1163,33 @@ export function CreateControlPage() {
         storeSnapshots: form.storeSnapshots ?? true,
         requireApproval: form.requireApproval ?? false,
         truthGapDetection: form.truthGapDetection ?? true,
-        internalSpoc: null,
-        externalSpoc: null,
+        internalSpoc: undefined,
+        externalSpoc: undefined,
         truthValidator: form.truthGapDetection ?? true,
         hasTruthGap: false,
         controlSource: form.source || 'local',
       });
+      
+      if (pendingDocs.length > 0 && newControl?.id) {
+        const token = useAuthStore.getState().token;
+        for (const pd of pendingDocs) {
+          const formData = new FormData();
+          formData.append('file', pd.file);
+          formData.append('doc_type', pd.docType);
+          
+          try {
+            await fetch(`http://localhost:8000/api/controls/${newControl.id}/documents`, {
+              method: 'POST',
+              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              body: formData
+            });
+          } catch (uploadErr) {
+            console.error('Failed to upload document', pd.docType, uploadErr);
+            toast.error(`Failed to upload ${pd.docType} document`);
+          }
+        }
+      }
+
       setIsActivating(false);
       setIsSuccess(true);
       toast.success(`Control "${form.name}" created successfully!`);
@@ -953,13 +1207,17 @@ export function CreateControlPage() {
       name: '', description: '', source: 'local', grcProvider: '',
       personality: '', category: 'Process', risk: 'High',
       slmTasks: [], supplierScope: [], lifecycleStage: '', communicationScope: {}, documentScope: [],
-      dataSources: ['email', 'documents'], evidenceRetention: '90 days',
+      dataSources: [], evidenceRetention: '90 days',
       triggerMode: 'event', triggerEvents: [], triggerFrequency: 'Daily',
       firstEvalDate: '', firstEvalTime: '',
       evaluationPrompt: '', anomalyTriggers: [], confidenceThreshold: 75,
       autoActions: ['send_email_alert', 'reduce_risk_score', 'flag_for_review', 'create_slm_task'],
       remediationSuggestion: '', storeSnapshots: true, requireApproval: false, truthGapDetection: true,
+      teamsTenantId: undefined, teamsScope: undefined, teamsChannels: undefined,
+      slackBotToken: undefined, slackWorkspaceUrl: undefined, slackScope: undefined, slackChannels: undefined,
+      zoomAccountId: undefined, zoomClientId: undefined, zoomClientSecret: undefined,
     });
+    setPendingDocs([]);
   };
 
   if (isSuccess) {
@@ -988,7 +1246,7 @@ export function CreateControlPage() {
 
   const stepContent: Record<number, React.ReactNode> = {
     1: <Step1 form={form} setForm={setForm} />,
-    2: <Step2 form={form} setForm={setForm} />,
+    2: <Step2 form={form} setForm={setForm} pendingDocs={pendingDocs} setPendingDocs={setPendingDocs} />,
     3: <Step3 form={form} setForm={setForm} />,
     4: <Step4 form={form} setForm={setForm} />,
     5: <Step5 form={form} setForm={setForm} />,

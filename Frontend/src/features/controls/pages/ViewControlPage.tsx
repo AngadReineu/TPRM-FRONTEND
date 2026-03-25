@@ -3,7 +3,7 @@ import {
   ArrowLeft, ShieldCheck, Activity, Play, Pencil, Trash2,
   Clock, Users, AlertTriangle, CheckCircle2, XCircle,
   Zap, Loader2, Mail, FileText, Globe, Shield, ChevronUp,
-  ChevronDown, Check,
+  ChevronDown, Check, MessageSquare, Hash, Video,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -117,6 +117,7 @@ export function ViewControlPage() {
   const autoActions: string[] = control.autoActions || [];
   const communicationScope: Record<string, string> = control.communicationScope || {};
   const dataSources: string[] = control.dataSources || [];
+  const dsConfig: Record<string, any> = control.dataSourcesConfig || {};
   const triggerEvents: string[] = control.triggerEvents || [];
   const covColor = control.coverage >= 80 ? '#10B981' : control.coverage >= 60 ? '#F59E0B' : '#EF4444';
   const covBg    = control.coverage >= 80 ? '#ECFDF5' : control.coverage >= 60 ? '#FFFBEB' : '#FEF2F2';
@@ -292,16 +293,47 @@ export function ViewControlPage() {
           {/* Data Source */}
           <Section title="Data Sources" icon={Activity} accent="#F59E0B">
             <InfoRow label="Sources">
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-col gap-2">
                 {dataSources.length > 0
                   ? dataSources.map(s => {
-                      const META: Record<string, { label: string; color: string; bg: string }> = {
-                        email: { label: 'Email Monitoring', color: '#0EA5E9', bg: '#EFF6FF' },
-                        documents: { label: 'Uploaded Documents', color: '#F59E0B', bg: '#FFFBEB' },
-                        portal: { label: 'Supplier Portal', color: '#10B981', bg: '#ECFDF5' },
+                      const META: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
+                        email: { label: 'Email Monitoring', color: '#0EA5E9', bg: '#EFF6FF', icon: Mail },
+                        documents: { label: 'Uploaded Documents', color: '#F59E0B', bg: '#FFFBEB', icon: FileText },
+                        portal: { label: 'Supplier Portal', color: '#10B981', bg: '#ECFDF5', icon: Globe },
+                        teams: { label: 'Microsoft Teams', color: '#0EA5E9', bg: '#EFF6FF', icon: MessageSquare },
+                        slack: { label: 'Slack', color: '#8B5CF6', bg: '#F5F3FF', icon: Hash },
+                        zoom: { label: 'Zoom', color: '#3B82F6', bg: '#EFF6FF', icon: Video },
                       };
-                      const m = META[s] || { label: s, color: '#64748B', bg: '#F8FAFC' };
-                      return <Chip key={s} label={m.label} color={m.color} bg={m.bg} />;
+                      const m = META[s] || { label: s, color: '#64748B', bg: '#F8FAFC', icon: Activity };
+                      return (
+                        <div key={s} className="flex flex-col gap-1.5 border border-slate-100 rounded-lg p-2.5">
+                          <span className="text-[11px] w-fit font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                            style={{ color: m.color, backgroundColor: m.bg, borderColor: m.color + '40' }}>
+                            <m.icon size={12} />
+                            {m.label}
+                          </span>
+                          
+                          {s === 'teams' && dsConfig.teams && (
+                            <div className="text-[11px] text-slate-500 pl-1 mt-1 flex flex-col gap-0.5">
+                              <div><strong>Tenant:</strong> {'*'.repeat(Math.max(0, (dsConfig.teams.tenant_id?.length || 8) - 8)) + (dsConfig.teams.tenant_id?.slice(-8) || '')}</div>
+                              <div><strong>Scope:</strong> {dsConfig.teams.scope === 'specific' ? `Channels (${dsConfig.teams.channels})` : 'All channels'}</div>
+                            </div>
+                          )}
+
+                          {s === 'slack' && dsConfig.slack && (
+                            <div className="text-[11px] text-slate-500 pl-1 mt-1 flex flex-col gap-0.5">
+                              <div><strong>Workspace:</strong> {dsConfig.slack.workspace}</div>
+                              <div><strong>Scope:</strong> {dsConfig.slack.scope === 'specific' ? `Channels (${dsConfig.slack.channels})` : 'All bot-invited channels'}</div>
+                            </div>
+                          )}
+
+                          {s === 'zoom' && dsConfig.zoom && (
+                            <div className="text-[11px] text-slate-500 pl-1 mt-1 flex flex-col gap-0.5">
+                              <div><strong>Account ID:</strong> {dsConfig.zoom.account_id}</div>
+                            </div>
+                          )}
+                        </div>
+                      );
                     })
                   : <span className="text-slate-400 text-sm">Not configured</span>}
               </div>

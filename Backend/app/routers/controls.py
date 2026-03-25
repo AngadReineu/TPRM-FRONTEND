@@ -1,10 +1,13 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+import os
+import shutil
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 
 from ..database import get_db
-from ..models.control import Control
+from ..models.control import Control, ControlDocument
 from ..models.user import User
 from ..schemas.control import ControlCreate, ControlUpdate, ControlResponse
 from ..dependencies import get_current_user, get_client_ip
@@ -95,3 +98,80 @@ def delete_control(
     db.commit()
     AuditService.log(db, current_user, "Control Updated", control.name,
                      f"Control '{control.name}' deleted", get_client_ip(request), status="Warning")
+
+UPLOAD_DIR = "uploads/controls"
+
+@router.get("/{control_id}/documents")
+def list_documents(control_id: str, db: Session = Depends(get_db)):
+    return db.query(ControlDocument).filter(ControlDocument.control_id == control_id).order_by(ControlDocument.uploaded_at.desc()).all()
+
+
+@router.post("/{control_id}/documents", status_code=201)
+def upload_document(
+    control_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    doc_type: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    control_dir = os.path.join(UPLOAD_DIR, control_id)
+    os.makedirs(control_dir, exist_ok=True)
+    
+    file_path = os.path.join(control_dir, file.filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    file_size = os.path.getsize(file_path)
+    
+    doc = ControlDocument(
+        id=str(uuid.uuid4()),
+        control_id=control_id,
+        filename=file.filename,
+        file_path=file_path,
+        doc_type=doc_type,
+        file_size=file_size
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    
+    AuditService.log(db, current_user, "Document Uploaded", doc.filename,
+                     f"Document '{doc.filename}' ({doc.doc_type}) uploaded to control", get_client_ip(request))
+                     
+    return doc
+
+
+@router.delete("/{control_id}/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    control_id: str,
+    doc_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = db.query(ControlDocument).filter(ControlDocument.id == doc_id, ControlDocument.control_id == control_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if os.path.exists(doc.file_path):
+        os.remove(doc.file_path)
+        
+    db.delete(doc)
+    db.commit()
+    
+    AuditService.log(db, current_user, "Document Deleted", doc.filename,
+                     f"Document '{doc.filename}' deleted from control", get_client_ip(request), status="Warning")
+
+
+@router.get("/{control_id}/documents/{doc_id}/download")
+def download_document(control_id: str, doc_id: str, db: Session = Depends(get_db)):
+    doc = db.query(ControlDocument).filter(ControlDocument.id == doc_id, ControlDocument.control_id == control_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+        
+    return FileResponse(doc.file_path, media_type="application/pdf", filename=doc.filename)

@@ -233,6 +233,7 @@ export function Sidebar() {
             {/* Controls */}
             <FuncItem icon={FileText} label="Agent Logs" to="/agents/logs" indent />
             <FuncItem icon={Sliders} label="Controls" to="/controls" indent />
+            <FuncItem icon={FolderOpen} label="Documents" to="/documents" indent />
             <FuncItem icon={LayoutTemplate} label="Templates" to="/templates" indent />
           </div>
         )}

@@ -1,5 +1,5 @@
-import { api } from '@/lib/api';
-import { withFallback, toCamelCase, toSnakeCase } from '@/lib/apiUtils';
+import { api } from '../../../lib/api';
+import { withFallback, toCamelCase, toSnakeCase } from '../../../lib/apiUtils';
 import type { RiskEvent, RiskDataPoint, ActionItem, ActionUpdatePayload } from '../types';
 
 const MOCK_RISK_DATA: RiskDataPoint[] = [

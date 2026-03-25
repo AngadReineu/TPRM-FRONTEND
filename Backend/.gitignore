@@ -20,6 +20,7 @@ env/
 *.swo
 
 # Uploads (user-generated content)
+uploads/
 app/uploads/*
 !app/uploads/.gitkeep
 
@@ -29,6 +30,7 @@ app/uploads/*
 
 # Alembic
 alembic/versions/__pycache__/
+app/migrations/
 
 # Logs
 *.log

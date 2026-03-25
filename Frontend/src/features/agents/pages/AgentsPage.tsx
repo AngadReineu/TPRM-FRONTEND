@@ -192,7 +192,7 @@ const IT_RISK_JOB = {
 function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (a: Agent) => void }) {
   const [name, setName] = useState('');
   const [gradient, setGradient] = useState(AVATAR_GRADIENTS[0]);
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [selectedTasks, setSelectedTasks] = useState<Record<string, string[]>>({});
   const [customTask, setCustomTask] = useState('');
   const [customTasks, setCustomTasks] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<Set<string>>(new Set());
@@ -240,7 +240,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     setSlmTemplate(tpl);
     setShowJobPanel(true);
     setActiveControlPanel(null);
-    setSelectedTasks(new Set());
+    setSelectedTasks({});
     setCustomTasks([]);
     if (tpl === 'consulting') { setFrequency('Daily'); setAlertLevel('High'); }
     if (tpl === 'it-risk') { setFrequency('Every 6hrs'); setAlertLevel('Critical Only'); }
@@ -254,27 +254,27 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     setStages(n);
   };
 
-  const toggleTask = (v: string) => {
-    const n = new Set(selectedTasks);
-    const wasSelected = n.has(v);
+  const toggleTask = (ctrlName: string, taskName: string) => {
+    setSelectedTasks(prev => {
+      const next = { ...prev };
+      if (!next[ctrlName]) next[ctrlName] = [];
+      const hasTask = next[ctrlName].includes(taskName);
 
-    if (wasSelected) {
-      n.delete(v);
-    } else {
-      n.add(v);
-      const controlsWithTask = controlsFromBackend.filter(c => c.slmTasks.includes(v));
-      if (controlsWithTask.length > 0) {
-        const newSuppliers = new Set(suppliers);
-        const newStages = new Set(stages);
-        controlsWithTask.forEach(ctrl => {
-          ctrl.supplierScope.forEach(sup => newSuppliers.add(sup));
-          if (ctrl.lifecycleStage) newStages.add(ctrl.lifecycleStage as Stage);
-        });
-        setSuppliers(newSuppliers);
-        setStages(newStages);
+      if (hasTask) {
+        next[ctrlName] = next[ctrlName].filter(t => t !== taskName);
+        if (next[ctrlName].length === 0) delete next[ctrlName];
+      } else {
+        next[ctrlName] = [...next[ctrlName], taskName];
+        if (ctrlName !== 'custom') {
+          const ctrl = controlsFromBackend.find(c => c.name === ctrlName);
+          if (ctrl) {
+            setSuppliers(p => new Set([...p, ...ctrl.supplierScope]));
+            if (ctrl.lifecycleStage) setStages(p => new Set([...p, ctrl.lifecycleStage as Stage]));
+          }
+        }
       }
-    }
-    setSelectedTasks(n);
+      return next;
+    });
   };
 
   const toggleSup = (v: string) => { const n = new Set(suppliers); n.has(v) ? n.delete(v) : n.add(v); setSuppliers(n); };
@@ -292,8 +292,9 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   const addCustomTask = () => {
     if (!customTask.trim()) return;
-    setCustomTasks(p => [...p, customTask.trim()]);
-    setSelectedTasks(p => new Set([...p, customTask.trim()]));
+    const t = customTask.trim();
+    setCustomTasks(p => [...p, t]);
+    setSelectedTasks(prev => ({ ...prev, custom: [...(prev.custom || []), t] }));
     setCustomTask('');
   };
 
@@ -303,12 +304,16 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     try {
       const jobInfo = slmTemplate === 'consulting' ? CONSULTING_JOB : slmTemplate === 'it-risk' ? IT_RISK_JOB : null;
       const firstStage = stages.size > 0 ? (Array.from(stages)[0] as Stage) : 'Acquisition';
+      const selectedControlNames = Object.keys(selectedTasks).filter(k => k !== 'custom');
+      const flatUniqueTasks = Array.from(new Set(Object.values(selectedTasks).flat()));
+      const combinedList = Array.from(new Set([...selectedControlNames, ...flatUniqueTasks]));
+      
       const agent = await createAgent({
         name: name.trim(),
         initials,
         status: 'active',
         stage: firstStage,
-        controls: selectedTasks.size,
+        controls: selectedControlNames.length || 1, // Store the count of controls accurately
         suppliers: suppliers.size,
         gradient,
         alerts: 0,
@@ -316,7 +321,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         frequency,
         notify: Array.from(notify),
         alertLevel,
-        controlList: Array.from(selectedTasks),
+        controlList: combinedList,
         supplierList: Array.from(suppliers),
         internalSpoc: internalContacts.filter(Boolean)[0] || '',
         externalSpoc: supplierContacts.filter(Boolean)[0] || '',
@@ -339,7 +344,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const handleViewAgents = () => { if (createdAgent) onCreated(createdAgent); onClose(); };
   const handleCreateAnother = () => {
     setSuccess(false); setCreatedAgent(null); setName('');
-    setGradient(AVATAR_GRADIENTS[0]); setSelectedTasks(new Set());
+    setGradient(AVATAR_GRADIENTS[0]); setSelectedTasks({});
     setSuppliers(new Set()); setStages(new Set(['Acquisition']));
     setAlertLevel('High'); setFrequency('Daily');
     setNotify(new Set(['Risk Manager'])); setDivision('');
@@ -349,6 +354,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   const jobInfo = slmTemplate === 'consulting' ? CONSULTING_JOB : slmTemplate === 'it-risk' ? IT_RISK_JOB : null;
   const consultingControls = controlsFromBackend.filter(c => c.slmTasks && c.slmTasks.length > 0);
+  const totalSelectedCount = Object.values(selectedTasks).flat().length;
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center">
@@ -480,8 +486,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-[13px] font-semibold text-slate-700">SLM Tasks</label>
-                    {selectedTasks.size > 0 && (
-                      <span className="text-[11px] font-semibold text-sky-500 bg-blue-50 px-2 py-px rounded-full">{selectedTasks.size} task{selectedTasks.size > 1 ? 's' : ''} selected</span>
+                    {totalSelectedCount > 0 && (
+                      <span className="text-[11px] font-semibold text-sky-500 bg-blue-50 px-2 py-px rounded-full">{totalSelectedCount} task{totalSelectedCount > 1 ? 's' : ''} selected</span>
                     )}
                   </div>
                   {!slmTemplate ? (
@@ -497,7 +503,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                       <div className="flex flex-col gap-2 mb-3">
                         {consultingControls.map((ctrl) => {
                           const isOpen = activeControlPanel === ctrl.name;
-                          const ctrlSelectedCount = ctrl.slmTasks.filter(t => selectedTasks.has(t)).length;
+                          const ctrlSelectedCount = (selectedTasks[ctrl.name] || []).length;
                           return (
                             <div key={ctrl.name}
                               onClick={() => { setActiveControlPanel(isOpen ? null : ctrl.name); setShowJobPanel(false); }}
@@ -540,14 +546,16 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                           <Plus size={12} /> Add
                         </button>
                       </div>
-                      {selectedTasks.size > 0 && (
+                      {totalSelectedCount > 0 && (
                         <div className="flex flex-wrap gap-1.5">
-                          {Array.from(selectedTasks).map(t => (
-                            <span key={t} className="text-[11px] rounded-full flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-sky-500 border border-sky-100">
-                              {t}
-                              <button onClick={(e) => { e.stopPropagation(); toggleTask(t); }} className="bg-transparent border-none cursor-pointer p-0 flex text-sky-400"><X size={9} /></button>
-                            </span>
-                          ))}
+                          {Object.entries(selectedTasks).flatMap(([ctrlName, tasks]) =>
+                            tasks.map(t => (
+                              <span key={`${ctrlName}-${t}`} className="text-[11px] rounded-full flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-sky-600 border border-sky-100/50">
+                                {t} {ctrlName !== 'custom' && <span className="opacity-50 text-[9px] -ml-0.5">({ctrlName})</span>}
+                                <button onClick={(e) => { e.stopPropagation(); toggleTask(ctrlName, t); }} className="bg-transparent border-none cursor-pointer p-0 flex text-sky-400 hover:text-sky-600"><X size={10} /></button>
+                              </span>
+                            ))
+                          )}
                         </div>
                       )}
                     </>
@@ -700,9 +708,9 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Select tasks to assign to agent</div>
                 <div className="flex flex-col gap-1.5">
                   {ctrl.slmTasks.map((task) => {
-                    const sel = selectedTasks.has(task);
+                    const sel = (selectedTasks[ctrl.name] || []).includes(task);
                     return (
-                      <div key={task} onClick={() => toggleTask(task)}
+                      <div key={task} onClick={() => toggleTask(ctrl.name, task)}
                         className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer border transition-all"
                         style={{ border: sel ? '2px solid #0EA5E9' : '1px solid #E2E8F0', backgroundColor: sel ? '#EFF6FF' : '#fff' }}>
                         <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center"

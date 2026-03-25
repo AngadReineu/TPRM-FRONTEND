@@ -58,9 +58,13 @@ export function ControlsPage() {
     return () => { mounted = false; };
   }, []);
 
-  // Reverse lookup — for each control find which agents have it in their control_list
-  function getAgentsForControl(controlName: string): Agent[] {
-    return agents.filter(a => (a.controlList || []).includes(controlName));
+  // Reverse lookup — an agent is assigned to a control if the agent's controlList contains the control's name explicitly
+  function getAgentsForControl(control: Control): Agent[] {
+    return agents.filter(a => {
+      const agentTasks = a.controlList || [];
+      // Strict check: ensures agents aren't confused by duplicate task names across controls
+      return agentTasks.includes(control.name);
+    });
   }
 
   const tabCategories: Record<string, Category[]> = {
@@ -223,7 +227,7 @@ export function ControlsPage() {
             </thead>
             <tbody>
               {filtered.map((c, idx) => {
-                const assignedAgents = getAgentsForControl(c.name);
+                const assignedAgents = getAgentsForControl(c);
                 return (
                   <tr key={c.id} className={`hover:bg-slate-50 ${idx < filtered.length - 1 ? 'border-b border-slate-100' : ''}`}>
                     <td className={tdClass}>
