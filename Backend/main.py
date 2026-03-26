@@ -7,7 +7,7 @@ import os
 from app.database import engine, SessionLocal
 from app.models import (
     User, Vendor, Agent, AgentTask, AgentLog, AgentTimeline,
-    Control, RiskEvent, RiskAction, AuditLog, Document,
+    Control, RiskEvent, AuditLog, Document,
     Template, Organisation, Division, SupplierNode, SystemNode, OrgSettings,
 )
 from app.database import Base

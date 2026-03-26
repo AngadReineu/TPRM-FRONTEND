@@ -125,7 +125,38 @@ def create_supplier_node(
     db.add(node)
     db.commit()
     db.refresh(node)
+
+    # ── Mirror into vendors table so TPRM page picks it up ──
+    try:
+        from ..models.vendor import Vendor
+        existing = db.query(Vendor).filter(Vendor.name == payload.name).first()
+        if not existing:
+            stage = getattr(payload, "stage", None) or "Acquisition"
+            stage_colors = {
+                "Acquisition": "#0EA5E9",
+                "Retention":   "#10B981",
+                "Upgradation": "#F59E0B",
+                "Offboarding": "#94A3B8",
+            }
+            vendor = Vendor(
+                id=str(uuid.uuid4()),
+                name=payload.name,
+                email=getattr(payload, "email", "") or "",
+                stage=stage,
+                stage_color=stage_colors.get(stage, "#64748B"),
+                score=50,
+                risk="Medium",
+                risk_color="#64748B",
+                assessment="pending",
+            )
+            db.add(vendor)
+            db.commit()
+    except Exception as e:
+        print(f"[VENDOR MIRROR FAILED] {e}")
+        db.rollback()
+
     return node
+
 
 
 @router.patch("/suppliers/{node_id}", response_model=SupplierNodeResponse)

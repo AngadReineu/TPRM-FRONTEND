@@ -77,11 +77,14 @@ export const MOCK_DASHBOARD_DATA: DashboardSummary = {
    API SERVICE
    ══════════════════════════════════════════════════════ */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-  return withFallback(
-    async () => toCamelCase<DashboardSummary>(await api.get('/dashboard/summary')),
-    MOCK_DASHBOARD_DATA,
-    'dashboard'
-  );
+  try {
+    const data = await api.get('/dashboard/summary');
+    const result = toCamelCase<DashboardSummary>(data);
+    return result;
+  } catch (e) {
+    console.error('[DASHBOARD API FAILED]', e);
+    return MOCK_DASHBOARD_DATA;
+  }
 }
 
 /* ══════════════════════════════════════════════════════

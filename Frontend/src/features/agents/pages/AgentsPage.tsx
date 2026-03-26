@@ -196,7 +196,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [customTask, setCustomTask] = useState('');
   const [customTasks, setCustomTasks] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<Set<string>>(new Set());
-  const [stages, setStages] = useState<Set<Stage>>(new Set(['Acquisition']));
+  const [stages, setStages] = useState<Set<Stage>>(new Set());
   const [alertLevel, setAlertLevel] = useState('High');
   const [frequency, setFrequency] = useState('Daily');
   const [notify, setNotify] = useState<Set<string>>(new Set(['Risk Manager']));
@@ -209,7 +209,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
   const [internalContacts, setInternalContacts] = useState<string[]>(['']);
   const [supplierContacts, setSupplierContacts] = useState<string[]>(['']);
-  const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
+  const [availableSuppliers, setAvailableSuppliers] = useState<{id: string, name: string}[]>([]);
   const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
   const [controlsFromBackend, setControlsFromBackend] = useState<{ name: string; slmTasks: string[]; supplierScope: string[]; lifecycleStage?: string; category?: string }[]>([]);
 
@@ -228,7 +228,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
           lifecycleStage: c.lifecycleStage,
           category: c.category,
         })));
-        setAvailableSuppliers(vendorsData.map((v: any) => v.name));
+        setAvailableSuppliers(vendorsData.map((v: any) => ({ id: v.id, name: v.name })));
         setAvailableDivisions(divisionsData);
       } catch (err) {
         console.error('Failed to load data:', err);
@@ -268,8 +268,9 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         if (ctrlName !== 'custom') {
           const ctrl = controlsFromBackend.find(c => c.name === ctrlName);
           if (ctrl) {
-            setSuppliers(p => new Set([...p, ...ctrl.supplierScope]));
-            if (ctrl.lifecycleStage) setStages(p => new Set([...p, ctrl.lifecycleStage as Stage]));
+            const vNames = ctrl.supplierScope.map((vId: string) => availableSuppliers.find(v => v.id === vId)?.name).filter(Boolean) as string[];
+            setSuppliers(p => new Set([...Array.from(p), ...vNames]));
+            if (ctrl.lifecycleStage) setStages(p => new Set([...Array.from(p), ctrl.lifecycleStage as Stage]));
           }
         }
       }
@@ -303,10 +304,12 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     setLoading(true);
     try {
       const jobInfo = slmTemplate === 'consulting' ? CONSULTING_JOB : slmTemplate === 'it-risk' ? IT_RISK_JOB : null;
-      const firstStage = stages.size > 0 ? (Array.from(stages)[0] as Stage) : 'Acquisition';
       const selectedControlNames = Object.keys(selectedTasks).filter(k => k !== 'custom');
       const flatUniqueTasks = Array.from(new Set(Object.values(selectedTasks).flat()));
-      const combinedList = Array.from(new Set([...selectedControlNames, ...flatUniqueTasks]));
+      const combinedList = flatUniqueTasks; // Task names only
+
+      const firstStage = stages.size > 0 ? (Array.from(stages)[0] as Stage) : undefined;
+      const supplierIds = Array.from(suppliers).map(name => availableSuppliers.find(v => v.name === name)?.id).filter(Boolean);
       
       const agent = await createAgent({
         name: name.trim(),
@@ -314,7 +317,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         status: 'active',
         stage: firstStage,
         controls: selectedControlNames.length || 1, // Store the count of controls accurately
-        suppliers: suppliers.size,
+        suppliers: supplierIds.length,
         gradient,
         alerts: 0,
         division: division || 'Unassigned',
@@ -322,7 +325,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         notify: Array.from(notify),
         alertLevel,
         controlList: combinedList,
-        supplierList: Array.from(suppliers),
+        supplierList: supplierIds,
         internalSpoc: internalContacts.filter(Boolean)[0] || '',
         externalSpoc: supplierContacts.filter(Boolean)[0] || '',
         slmTemplate: slmTemplate || 'custom',
@@ -345,7 +348,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const handleCreateAnother = () => {
     setSuccess(false); setCreatedAgent(null); setName('');
     setGradient(AVATAR_GRADIENTS[0]); setSelectedTasks({});
-    setSuppliers(new Set()); setStages(new Set(['Acquisition']));
+    setSuppliers(new Set()); setStages(new Set());
     setAlertLevel('High'); setFrequency('Daily');
     setNotify(new Set(['Risk Manager'])); setDivision('');
     setSlmTemplate(null); setShowJobPanel(false); setActiveControlPanel(null);
@@ -565,7 +568,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 {/* Assign Suppliers */}
                 <div>
                   <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Assign Suppliers</label>
-                  <MultiSelect label="Suppliers" options={availableSuppliers} selected={suppliers} onToggle={toggleSup} chipColor={['#F5F3FF', '#8B5CF6']} />
+                  <MultiSelect label="Suppliers" options={availableSuppliers.map(v => v.name)} selected={suppliers} onToggle={toggleSup} chipColor={['#F5F3FF', '#8B5CF6']} />
                 </div>
 
                 {/* Data Flow Stage */}
@@ -750,6 +753,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
       const [agents, setAgents]               = useState<Agent[]>([]);
       const [isLoading, setIsLoading]         = useState(true);
       const [error, setError]                 = useState<string | null>(null);
+      const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
         let mounted = true;
@@ -766,6 +770,17 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
       });
 
     return () => {mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/agents/activity/recent')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setRecentActivity(data);
+        }
+      })
+      .catch(() => { /* keep mock */ });
   }, []);
 
   useEffect(() => {
@@ -880,7 +895,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         {/* Agent cards grid */}
         <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           {agents.map((agent) => {
-            const [sBg, sClr] = STAGE_CLR[agent.stage];
+            const displayStage = agent.stage || 'Acquisition';
+            const [sBg, sClr] = STAGE_CLR[displayStage as Stage] || ['#F1F5F9', '#64748B'];
             const avatarUrl = getAvatarUrl(agent.avatarSeed || agent.initials);
             return (
               <div
@@ -904,7 +920,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <div className="text-sm font-bold text-slate-900 mb-1.5">{agent.name}</div>
                 {agent.role && <div className="text-[11px] text-slate-400 mb-1.5 leading-snug">{agent.role}</div>}
                 <div className="mb-2"><StatusIndicator status={agent.status} /></div>
-                <span className="text-[10px] font-semibold rounded-full inline-block mb-2 px-2 py-0.5" style={{ backgroundColor: sBg, color: sClr }}>{agent.stage}</span>
+                <span className="text-[10px] font-semibold rounded-full inline-block mb-2 px-2 py-0.5" style={{ backgroundColor: sBg, color: sClr }}>{displayStage}</span>
                 <div className="text-[11px] text-slate-400">{agent.controls} controls &middot; {agent.suppliers} sup</div>
                 <div className="flex items-center gap-1 justify-center mt-2">
                   {agent.alerts === 0
@@ -949,7 +965,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
           />
         )}
 
-        {/* Agent Activity feed */}
+          {/* Agent Activity feed */}
         <div className="mt-8">
           <div className="flex justify-between items-start mb-3">
             <div>
@@ -959,28 +975,56 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
             <button onClick={() => toast('Coming soon')} className="text-[13px] text-sky-500 bg-transparent border-none cursor-pointer font-medium">View All</button>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            {[
-              { id: 'a1', name: 'Agent Aria', seed: 'Aria', action: 'checked MFA compliance on XYZ Corporation', time: '2 min ago', icon: <CheckCircle2 size={16} color="#10B981" /> },
-              { id: 'a2', name: 'Agent Blake', seed: 'Blake', action: 'raised alert: Call Center Ltd missing data', time: '8 min ago', icon: <AlertCircle size={16} color="#EF4444" /> },
-              { id: 'a3', name: 'Agent Casey', seed: 'Casey', action: 'started backup verification check', time: 'just now', icon: <RefreshCw size={16} color="#F59E0B" className="animate-spin" /> },
-              { id: 'a1', name: 'Agent Aria', seed: 'Aria', action: 'document expiry warning: ISO 27001 cert expires in 22 days', time: '15 min ago', icon: <AlertTriangle size={16} color="#F59E0B" /> },
-              { id: 'a2', name: 'Agent Blake', seed: 'Blake', action: 'completed access review policy evaluation', time: '1 hr ago', icon: <CheckCircle2 size={16} color="#10B981" /> },
-            ].map((row, i, arr) => (
-              <div
-                key={i}
-                onClick={() => { navigate(`/agents/${row.id}`); }}
-                className={`flex items-center gap-3 cursor-pointer transition-colors hover:bg-slate-50 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}
-              >
-                <img src={getAvatarUrl(row.seed)} alt={row.name} width={28} height={28} className="rounded-full bg-slate-100 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="m-0 text-[13px] text-slate-700 leading-snug">
-                    <span className="font-semibold text-slate-900">{row.name}</span>{' '}{row.action}
-                  </p>
-                  <div className="text-[11px] text-slate-400 mt-0.5">{row.time}</div>
+            {(() => {
+              const MOCK_ACTIVITY = [
+                { agent_name: 'Agent Aria',  agent_initials: 'AA', agent_color: '#0EA5E9', message: 'checked MFA compliance on XYZ Corporation',         log_type: 'pass',    created_at: null },
+                { agent_name: 'Agent Blake', agent_initials: 'AB', agent_color: '#EF4444', message: 'raised alert: Call Center Ltd missing data',          log_type: 'warning', created_at: null },
+                { agent_name: 'Agent Casey', agent_initials: 'AC', agent_color: '#F59E0B', message: 'started backup verification check',                   log_type: 'fetch',   created_at: null },
+                { agent_name: 'Agent Aria',  agent_initials: 'AA', agent_color: '#0EA5E9', message: 'document expiry warning: ISO 27001 cert expires in 22 days', log_type: 'warn', created_at: null },
+                { agent_name: 'Agent Blake', agent_initials: 'AB', agent_color: '#EF4444', message: 'completed access review policy evaluation',             log_type: 'success', created_at: null },
+              ];
+              const rows = recentActivity.length > 0 ? recentActivity : MOCK_ACTIVITY;
+
+              const getIcon = (logType: string) => {
+                const t = (logType || '').toLowerCase();
+                if (t === 'success' || t === 'pass') return <CheckCircle2 size={16} color="#10B981" />;
+                if (t === 'error') return <AlertCircle size={16} color="#EF4444" />;
+                if (t === 'warning' || t === 'warn') return <AlertTriangle size={16} color="#F59E0B" />;
+                if (t === 'fetch' || t === 'eval') return <RefreshCw size={16} color="#0EA5E9" />;
+                if (t === 'action') return <Zap size={16} color="#14B8A6" />;
+                return <Activity size={16} color="#94A3B8" />;
+              };
+
+              const relativeTime = (iso: string | null) => {
+                if (!iso) return 'just now';
+                const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+                if (diff < 60) return 'just now';
+                if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+                if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+                return `${Math.floor(diff / 86400)} days ago`;
+              };
+
+              return rows.map((row: any, i: number, arr: any[]) => (
+                <div
+                  key={i}
+                  className={`flex items-center gap-3 cursor-pointer transition-colors hover:bg-slate-50 py-3 px-4 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}
+                >
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                    style={{ backgroundColor: row.agent_color || '#0EA5E9' }}
+                  >
+                    {(row.agent_initials || row.agent_name || '?').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="m-0 text-[13px] text-slate-700 leading-snug">
+                      <span className="font-semibold text-slate-900">{row.agent_name}</span>{' '}{row.message}
+                    </p>
+                    <div className="text-[11px] text-slate-400 mt-0.5">{relativeTime(row.created_at)}</div>
+                  </div>
+                  <div className="shrink-0">{getIcon(row.log_type)}</div>
                 </div>
-                <div className="shrink-0">{row.icon}</div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
 

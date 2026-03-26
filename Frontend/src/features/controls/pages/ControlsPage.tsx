@@ -141,7 +141,7 @@ export function ControlsPage() {
       </div>
 
       {/* Intelligence Summary Strip */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* <div className="grid grid-cols-4 gap-3">
         {([
           { label: 'Consulting Audits', value: controls.filter(c => c.personality === 'Consulting').length, color: '#0EA5E9', bg: '#EFF6FF', Icon: Handshake, primary: true },
           { label: 'Operations Checks', value: controls.filter(c => c.personality === 'Operations').length, color: '#10B981', bg: '#ECFDF5', Icon: Truck, primary: false },
@@ -163,7 +163,7 @@ export function ControlsPage() {
             </div>
           </div>
         ))}
-      </div>
+      </div> */}
 
       {/* Primary Tabs */}
       <div className="flex gap-0 bg-white border border-slate-200 rounded-[10px] p-1 self-start">

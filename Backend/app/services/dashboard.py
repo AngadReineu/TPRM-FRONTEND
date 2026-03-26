@@ -3,7 +3,7 @@ from sqlalchemy import func
 from ..models.vendor import Vendor
 from ..models.agent import Agent
 from ..models.control import Control
-from ..models.risk import RiskEvent
+from ..models.risk_event import RiskEvent
 from ..schemas.dashboard import (
     DashboardSummary, RiskTrendPoint, StageDataItem, AgentRow, RiskAlert
 )
@@ -97,7 +97,7 @@ def build_dashboard(db: Session) -> DashboardSummary:
         bg, _ = severity_styles.get(sev, ("#F8FAFC", "#64748B"))
         recent_alerts.append(RiskAlert(
             type=r.category or "Risk",
-            supplier=r.supplier,
+            supplier=r.supplier_name,
             system="TPRM System",
             severity=r.severity,
             severity_bg=bg,

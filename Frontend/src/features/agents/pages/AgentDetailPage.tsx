@@ -394,7 +394,8 @@ function AgentDetailView({
   const agentColor = agent.color || '#0EA5E9';
   const agentRole = agent.role || 'AI Agent';
   const isActive = agent.status === 'live' || agent.status === 'active';
-  const [stageBg, stageClr] = STAGE_CLR[agent.stage];
+  const displayStage = agent.stage || 'Acquisition';
+  const [stageBg, stageClr] = STAGE_CLR[displayStage as Stage] || ['#F1F5F9', '#64748B'];
 
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
@@ -402,6 +403,19 @@ function AgentDetailView({
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [forceDisconnect, setForceDisconnect] = useState(false);
+  const [vendors, setVendors] = useState<any[]>([]);
+
+  useEffect(() => {
+    import('../../vendors/services/vendors.data')
+      .then(m => m.getVendors().then(setVendors))
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (agent?.status === 'idle') {
+      getAgentTasks(agent.id, 'list').then(setTasks).catch(console.error);
+    }
+  }, [agent?.status, agent.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -690,18 +704,22 @@ function AgentDetailView({
                 <div className="flex items-center gap-2"><Eye size={16} color="#0EA5E9" /><span className="text-sm font-bold text-slate-900">Suppliers Monitored</span></div>
                 <span className="bg-sky-50 text-sky-500 text-[11px] rounded-full px-2 py-px">{agent.suppliers}</span>
               </div>
-              {(agent.supplierList || []).map((supName: string, i: number, arr: string[]) => (
-                <div key={supName} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: '#0EA5E9' }} />
-                      <span className="text-[13px] font-semibold text-slate-700">{supName}</span>
+              {((agent.supplierList || []) as string[]).map((supId: string, i: number, arr: string[]) => {
+                const vendor = vendors.find(v => v.id === supId || v.name === supId);
+                const supName = vendor?.name || supId;
+                return (
+                  <div key={supId} className={`flex justify-between items-center py-2.5 ${i < arr.length - 1 ? 'border-b border-[#F8FAFC]' : ''}`}>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: '#0EA5E9' }} />
+                        <span className="text-[13px] font-semibold text-slate-700">{supName}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 pl-3.5">{displayStage}</span>
                     </div>
-                    <span className="text-[10px] text-slate-400 pl-3.5">{agent.stage}</span>
+                    <span className="bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px">Flowing</span>
                   </div>
-                  <span className="bg-emerald-50 text-emerald-500 text-[11px] rounded-full px-2 py-px">Flowing</span>
-                </div>
-              ))}
+                );
+              })}
               {(!agent.supplierList || agent.supplierList.length === 0) && <div className="text-xs text-slate-400 py-4 text-center italic">No suppliers monitored</div>}
             </div>
 

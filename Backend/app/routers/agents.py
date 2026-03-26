@@ -19,7 +19,32 @@ from ..services.agent_stream import stream_agent_logs
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
-# ── Agent list & detail ────────────────────────────────────
+# ── Recent cross-agent activity ────────────────────────────
+
+@router.get("/activity/recent")
+def get_recent_activity(db: Session = Depends(get_db)):
+    """Returns the 10 most recent log entries across all agents, no auth required."""
+    rows = (
+        db.query(AgentLog, Agent)
+        .join(Agent, AgentLog.agent_id == Agent.id)
+        .order_by(AgentLog.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return [
+        {
+            "agent_name": agent.name,
+            "agent_initials": agent.initials,
+            "agent_color": agent.color or "#0EA5E9",
+            "message": log.message,
+            "log_type": log.type,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "run_id": log.run_id,
+        }
+        for log, agent in rows
+    ]
+
+
 
 @router.get("", response_model=List[AgentResponse])
 def list_agents(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -138,6 +163,8 @@ class AgentTaskCreate(BaseModel):
     due_date: Optional[str] = None
     description: Optional[str] = None
     view: Optional[str] = "list"
+    run_id: Optional[str] = None
+    run_date: Optional[str] = None
 
 
 @router.post("/{agent_id}/tasks", response_model=AgentTaskResponse, status_code=status.HTTP_201_CREATED)
@@ -173,9 +200,48 @@ def create_agent_task(
     # Increment counters on the agent
     agent.open_tasks = (agent.open_tasks or 0) + 1
     agent.alerts = (agent.alerts or 0) + 1
-
+    
+    # Commit the task and agent tracking FIRST so it doesn't fail
     db.commit()
     db.refresh(task)
+    
+    if payload.priority in ["Critical", "High"]:
+        try:
+            from ..models.vendor import Vendor
+            from ..models.risk_event import RiskEvent
+            score_change = 18 if payload.priority == "Critical" else 10
+            vendor = db.query(Vendor).filter(Vendor.name == payload.supplier).first()
+            current_score = vendor.score if vendor else 50
+            vendor_id = vendor.id if vendor else None
+            
+            risk_event = RiskEvent(
+                date=datetime.now().strftime("%b %d, %Y"),
+                run_id=payload.run_id,
+                run_date=payload.run_date,
+                agent_id=agent_id,
+                supplier_name=payload.supplier or "Unknown",
+                supplier_id=vendor_id,
+                task_name=payload.title,
+                description=payload.title,
+                severity=payload.priority,
+                status="Open",
+                score_change=score_change,
+                current_score=current_score,
+                category="Agent Detection",
+                full_detail=payload.description,
+                impact=f"Risk detected during agent evaluation of {payload.supplier}. Task: {payload.title}. Severity: {payload.priority}. Immediate review required.",
+                actions=[
+                    {"id": "a1", "title": "Review and verify finding", "detail": (payload.description or "")[:200], "owner": "Risk Manager", "effort": "Low", "scoreReduction": -3},
+                    {"id": "a2", "title": "Contact supplier for documentation", "detail": f"Request {payload.supplier} provide required documentation to resolve: {payload.title}", "owner": "Risk Manager", "effort": "Low", "scoreReduction": -2},
+                    {"id": "a3", "title": "Re-run agent evaluation after remediation", "detail": "Once remediation steps are completed trigger agent re-evaluation to confirm issue is resolved.", "owner": "Agent", "effort": "Low", "scoreReduction": -5}
+                ]
+            )
+            db.add(risk_event)
+            db.commit()
+        except Exception as e:
+            print(f"[RISK EVENT CREATION FAILED] {e}")
+            db.rollback()
+
     return task
 
 

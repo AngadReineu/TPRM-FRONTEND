@@ -943,13 +943,7 @@ IMPORTANT:
     }
   }, [form.slmTasks, form.personality, form.evaluationPromptEdited]);
 
-  // Auto-generate remediation suggestion
-  useEffect(() => {
-    if (form.slmTasks?.length > 0 && !form.remediationEdited) {
-      const suggestion = `Request the supplier provide the required documentation for: ${(form.slmTasks || []).join(', ')}. Escalate to internal SPOC if not received within 48 hours. Update supplier risk score pending resolution.`;
-      setForm((f: any) => ({ ...f, remediationSuggestion: suggestion }));
-    }
-  }, [form.slmTasks]);
+
 
   // Auto-select anomaly triggers from SLM tasks
   useEffect(() => {
@@ -1052,15 +1046,7 @@ IMPORTANT:
         </div>
       </div>
 
-      {/* Remediation Suggestion */}
-      <div className="mb-6">
-        <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">Remediation Suggestion</label>
-        <div className="text-xs text-slate-400 mb-2">Auto-generated from SLM Tasks. Edit to customise.</div>
-        <textarea rows={3} className={`${INPUT_CLS} resize-none`}
-          value={form.remediationSuggestion || ''}
-          onChange={e => setForm({ ...form, remediationSuggestion: e.target.value, remediationEdited: true })}
-          placeholder="What should the agent recommend when this control fails?" />
-      </div>
+
 
       {/* Toggles */}
       <div className="flex flex-col gap-3">
@@ -1159,7 +1145,6 @@ export function CreateControlPage() {
         anomalyTriggers: form.anomalyTriggers || [],
         confidenceThreshold: form.confidenceThreshold ?? 75,
         autoActions: form.autoActions || [],
-        remediationSuggestion: form.remediationSuggestion || null,
         storeSnapshots: form.storeSnapshots ?? true,
         requireApproval: form.requireApproval ?? false,
         truthGapDetection: form.truthGapDetection ?? true,
@@ -1212,7 +1197,7 @@ export function CreateControlPage() {
       firstEvalDate: '', firstEvalTime: '',
       evaluationPrompt: '', anomalyTriggers: [], confidenceThreshold: 75,
       autoActions: ['send_email_alert', 'reduce_risk_score', 'flag_for_review', 'create_slm_task'],
-      remediationSuggestion: '', storeSnapshots: true, requireApproval: false, truthGapDetection: true,
+      storeSnapshots: true, requireApproval: false, truthGapDetection: true,
       teamsTenantId: undefined, teamsScope: undefined, teamsChannels: undefined,
       slackBotToken: undefined, slackWorkspaceUrl: undefined, slackScope: undefined, slackChannels: undefined,
       zoomAccountId: undefined, zoomClientId: undefined, zoomClientSecret: undefined,

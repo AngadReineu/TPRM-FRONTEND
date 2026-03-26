@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .models.user        import User
 from .models.vendor      import Vendor
 from .models.control     import Control
-from .models.risk        import RiskEvent, RiskAction
+from .models.risk_event  import RiskEvent
 from .models.audit_log   import AuditLog
 from .models.template    import Template
 from .models.library     import Organisation, Division, SupplierNode, SystemNode
@@ -26,7 +26,7 @@ def seed_all(db: Session) -> None:
         return
     _seed_users(db)
     _seed_vendors(db)
-    _seed_risks(db)
+
     _seed_templates(db)
     _seed_library(db)
     _seed_settings(db)
@@ -73,34 +73,6 @@ def _seed_vendors(db: Session):
 
 # ── Controls ───────────────────────────────────────────────
 
-# ── Risk Events ────────────────────────────────────────────
-
-def _seed_risks(db: Session):
-    events = [
-        RiskEvent(id="r1", date="2026-03-04", supplier="XYZ Corporation",   desc="SOW signed after service delivery commenced",                    severity="critical", score_change="+18", status="Open",     current_score=78, category="Contractual", full_detail="SOW was signed on Feb 10 but service delivery began Feb 5. This creates a 5-day contractual exposure window.", impact="Legal liability, contract enforceability risk"),
-        RiskEvent(id="r2", date="2026-03-03", supplier="XYZ Corporation",   desc="Unapproved payment of ₹10L with no PO found",                   severity="critical", score_change="+12", status="Open",     current_score=78, category="Financial",   full_detail="Payment of ₹10L was processed without a corresponding purchase order in the system.",                          impact="Financial control breach, potential fraud risk"),
-        RiskEvent(id="r3", date="2026-03-02", supplier="GHI Technologies",  desc="Annual TPRA overdue by 3 days",                                  severity="high",     score_change="+8",  status="Open",     current_score=91, category="Compliance",  full_detail="Annual Third-Party Risk Assessment was due Mar 1. No submission received as of Mar 4.",                        impact="Regulatory non-compliance, unassessed risk exposure"),
-        RiskEvent(id="r4", date="2026-02-28", supplier="ABC Services Ltd",  desc="SLA uptime breach — 98.1% vs 99.5% contracted",                  severity="high",     score_change="+5",  status="Open",     current_score=42, category="SLA",         full_detail="ABC Services reported 98.1% uptime for February 2026 against a contracted 99.5% SLA.",                       impact="Service reliability risk, penalty clause triggered"),
-        RiskEvent(id="r5", date="2026-02-25", supplier="DEF Limited",       desc="3 orphaned accounts with active access to supplier systems",      severity="high",     score_change="+10", status="Open",     current_score=62, category="Access",      full_detail="Accounts U1042, U1098, U1187 belong to terminated employees but still have active system access.",             impact="Insider threat, data breach risk"),
-        RiskEvent(id="r6", date="2026-02-20", supplier="MNO Partners",      desc="Onboarding checklist incomplete — 3 critical items missing",     severity="medium",   score_change="+6",  status="Open",     current_score=55, category="Compliance",  full_detail="MNO Partners onboarding is at 62%. Missing: BCP document, cyber insurance cert, sub-processor list.",          impact="Operational risk, incomplete due diligence"),
-        RiskEvent(id="r7", date="2026-02-15", supplier="JKL Consultancy",   desc="DPA missing sub-processor annex — GDPR Article 28 breach",       severity="medium",   score_change="+4",  status="Open",     current_score=35, category="Legal",       full_detail="Data Processing Agreement with JKL Consultancy is missing the sub-processor annex required by GDPR Art. 28.", impact="GDPR non-compliance, regulatory penalty risk"),
-        RiskEvent(id="r8", date="2026-01-10", supplier="STU Analytics",     desc="PII configuration not completed for data sharing",               severity="medium",   score_change="+3",  status="Resolved", current_score=22, category="PII",         full_detail="STU Analytics shares PII but the configuration in the TPRM portal is not completed.",                         impact="Data governance gap, untracked PII exposure"),
-    ]
-    db.add_all(events)
-    db.flush()
-
-    actions = [
-        RiskAction(id="ra1",  risk_event_id="r1", title="Obtain legal sign-off on retroactive SOW",     detail="Engage legal team to assess retroactive contract enforceability",              score_reduction=8,  owner="priya@abc.co",    effort="High"),
-        RiskAction(id="ra2",  risk_event_id="r1", title="Implement SOW pre-check in onboarding flow",  detail="Add system control to block service initiation until SOW is countersigned",   score_reduction=6,  owner="anita@abc.co",    effort="Medium"),
-        RiskAction(id="ra3",  risk_event_id="r2", title="Finance Controller investigation",            detail="Review full payment chain and identify authorization gap",                     score_reduction=6,  owner="finance@abc.co",  effort="Medium"),
-        RiskAction(id="ra4",  risk_event_id="r2", title="Enforce PO gating in payment system",        detail="Block payments above ₹1L without linked PO number",                           score_reduction=5,  owner="raj@abc.co",      effort="High"),
-        RiskAction(id="ra5",  risk_event_id="r3", title="Escalate TPRA overdue notice",               detail="Send formal escalation to GHI Technologies SPOC and legal team",               score_reduction=4,  owner="priya@abc.co",    effort="Low"),
-        RiskAction(id="ra6",  risk_event_id="r3", title="Complete risk assessment using last data",    detail="Use previous TPRA data to produce interim risk score while awaiting update",   score_reduction=3,  owner="priya@abc.co",    effort="Medium"),
-        RiskAction(id="ra7",  risk_event_id="r4", title="Issue SLA penalty notice",                   detail="Trigger contractual penalty clause per Section 8.2 of MSA",                   score_reduction=2,  owner="raj@abc.co",      effort="Low"),
-        RiskAction(id="ra8",  risk_event_id="r5", title="Immediate account revocation",               detail="IT Admin to disable U1042, U1098, U1187 within 2 hours",                      score_reduction=8,  owner="it-admin@abc.co", effort="Low"),
-        RiskAction(id="ra9",  risk_event_id="r5", title="Audit all offboarded employee accounts",     detail="Run full HR-to-AD cross-reference for past 6 months",                          score_reduction=5,  owner="raj@abc.co",      effort="Medium"),
-    ]
-    db.add_all(actions)
 
 
 # ── Templates ──────────────────────────────────────────────

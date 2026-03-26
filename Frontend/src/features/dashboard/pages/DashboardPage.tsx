@@ -19,7 +19,7 @@ import { KpiWidget } from '../components/KpiWidget';
 import { SegmentBar } from '../components/SegmentBar';
 import { PulseDot } from '../components/PulseDot';
 
-import { getDesignTokens, getDashboardSummary } from '../services/dashboard.data';
+import { getDesignTokens, getDashboardSummary, MOCK_DASHBOARD_DATA } from '../services/dashboard.data';
 import type { DashboardSummary } from '../types';
 
 const token = getDesignTokens();
@@ -108,7 +108,7 @@ function DashboardSkeleton() {
    ══════════════════════════════════════════════════════ */
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState<DashboardSummary | null>(null);
+  const [data, setData] = useState<DashboardSummary>(MOCK_DASHBOARD_DATA);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -140,20 +140,7 @@ export function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  if (!data) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500">
-        <AlertCircle size={48} className="mb-4 text-slate-400" />
-        <p className="text-lg font-medium">Failed to load dashboard data</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+
 
   const {
     totalVendors,
