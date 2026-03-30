@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, Float, JSON, Text, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
 
@@ -41,6 +42,11 @@ class Agent(Base):
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
     updated_at    = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Relationships
+    tasks    = relationship("AgentTask",     back_populates="agent", cascade="all, delete-orphan")
+    logs     = relationship("AgentLog",      back_populates="agent", cascade="all, delete-orphan")
+    timeline = relationship("AgentTimeline", back_populates="agent", cascade="all, delete-orphan")
+
 
 class AgentTask(Base):
     __tablename__ = "agent_tasks"
@@ -58,6 +64,8 @@ class AgentTask(Base):
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
+    agent = relationship("Agent", back_populates="tasks")
+
 
 class AgentLog(Base):
     __tablename__ = "agent_logs"
@@ -74,6 +82,8 @@ class AgentLog(Base):
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
+    agent = relationship("Agent", back_populates="logs")
+
 
 class AgentTimeline(Base):
     __tablename__ = "agent_timeline"
@@ -86,3 +96,6 @@ class AgentTimeline(Base):
     status      = Column(String, default="info")          # alert | info | success | warning
 
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    agent = relationship("Agent", back_populates="timeline")
+

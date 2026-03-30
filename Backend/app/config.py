@@ -8,7 +8,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480
     upload_dir: str = "app/uploads"
+    upload_dir_controls: str = "uploads/controls"
     max_upload_size_mb: int = 25
+    agent_script_path: str = r"C:\Users\Angad\OneDrive\Desktop\Agent\GmailAgent\ConsultingAgent.py"
+    mistral_url: str = "http://localhost:11434/api/chat"
 
     class Config:
         env_file = ".env"

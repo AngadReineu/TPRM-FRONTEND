@@ -1,7 +1,7 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from ..database import get_db
 from ..models.vendor import Vendor
@@ -15,8 +15,19 @@ router = APIRouter(prefix="/vendors", tags=["vendors"])
 
 
 @router.get("", response_model=List[VendorResponse])
-def list_vendors(db: Session = Depends(get_db)):
-    return db.query(Vendor).order_by(Vendor.name).all()
+def list_vendors(
+    db: Session = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    search: Optional[str] = Query(None),
+    stage: Optional[str] = Query(None),
+):
+    q = db.query(Vendor)
+    if search:
+        q = q.filter(Vendor.name.ilike(f"%{search}%"))
+    if stage:
+        q = q.filter(Vendor.stage == stage)
+    return q.order_by(Vendor.name).offset(skip).limit(limit).all()
 
 
 @router.get("/{vendor_id}", response_model=VendorResponse)

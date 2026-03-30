@@ -1,20 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
+import logging
 import uuid
 import subprocess
 import sys
 import os
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from typing import List, Optional
+
 from ..database import get_db
 from ..models.agent import Agent, AgentTask, AgentLog, AgentTimeline
 from ..models.user import User
-from ..schemas.agent import AgentResponse, AgentCreate, AgentUpdate, AgentTaskResponse, AgentLogResponse, AgentTimelineResponse
+from ..schemas.agent import (
+    AgentResponse, AgentCreate, AgentUpdate,
+    AgentTaskResponse, AgentLogResponse, AgentTimelineResponse,
+    AgentTaskCreate, AgentLogCreate, RunTaskPayload, AgentTaskUpdate,
+)
 from ..dependencies import get_current_user
 from ..services.agent_stream import stream_agent_logs
+from ..services import agent_service
+from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -129,12 +138,7 @@ def delete_agent(agent_id: str, db: Session = Depends(get_db), current_user: Use
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-
-    db.query(AgentTask).filter(AgentTask.agent_id == agent_id).delete()
-    db.query(AgentLog).filter(AgentLog.agent_id == agent_id).delete()
-    db.query(AgentTimeline).filter(AgentTimeline.agent_id == agent_id).delete()
-
-    db.delete(agent)
+    db.delete(agent)  # cascade handles tasks, logs, timeline automatically
     db.commit()
 
 
@@ -155,18 +159,6 @@ def get_agent_tasks(
     )
 
 
-class AgentTaskCreate(BaseModel):
-    title: str
-    supplier: Optional[str] = None
-    priority: Optional[str] = "Medium"
-    status: Optional[str] = "Open"
-    due_date: Optional[str] = None
-    description: Optional[str] = None
-    view: Optional[str] = "list"
-    run_id: Optional[str] = None
-    run_date: Optional[str] = None
-
-
 @router.post("/{agent_id}/tasks", response_model=AgentTaskResponse, status_code=status.HTTP_201_CREATED)
 def create_agent_task(
     agent_id: str,
@@ -179,86 +171,25 @@ def create_agent_task(
     Creates a task visible in the Agent Tasks panel on the detail page.
     Also increments open_tasks and alerts count on the agent.
     """
-    agent = db.query(Agent).filter(Agent.id == agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    task = AgentTask(
-        id=str(uuid.uuid4()),
-        agent_id=agent_id,
-        view=payload.view or "list",
-        title=payload.title,
-        supplier=payload.supplier or "",
-        priority=payload.priority or "Medium",
-        assignee="",
-        status=payload.status or "Open",
-        due_date=payload.due_date or datetime.now().strftime("%Y-%m-%d"),
-        description=payload.description or "",
-    )
-    db.add(task)
-
-    # Increment counters on the agent
-    agent.open_tasks = (agent.open_tasks or 0) + 1
-    agent.alerts = (agent.alerts or 0) + 1
-    
-    # Commit the task and agent tracking FIRST so it doesn't fail
-    db.commit()
-    db.refresh(task)
-    
-    if payload.priority in ["Critical", "High"]:
-        try:
-            from ..models.vendor import Vendor
-            from ..models.risk_event import RiskEvent
-            score_change = 18 if payload.priority == "Critical" else 10
-            vendor = db.query(Vendor).filter(Vendor.name == payload.supplier).first()
-            current_score = vendor.score if vendor else 50
-            vendor_id = vendor.id if vendor else None
-            
-            risk_event = RiskEvent(
-                date=datetime.now().strftime("%b %d, %Y"),
-                run_id=payload.run_id,
-                run_date=payload.run_date,
-                agent_id=agent_id,
-                supplier_name=payload.supplier or "Unknown",
-                supplier_id=vendor_id,
-                task_name=payload.title,
-                description=payload.title,
-                severity=payload.priority,
-                status="Open",
-                score_change=score_change,
-                current_score=current_score,
-                category="Agent Detection",
-                full_detail=payload.description,
-                impact=f"Risk detected during agent evaluation of {payload.supplier}. Task: {payload.title}. Severity: {payload.priority}. Immediate review required.",
-                actions=[
-                    {"id": "a1", "title": "Review and verify finding", "detail": (payload.description or "")[:200], "owner": "Risk Manager", "effort": "Low", "scoreReduction": -3},
-                    {"id": "a2", "title": "Contact supplier for documentation", "detail": f"Request {payload.supplier} provide required documentation to resolve: {payload.title}", "owner": "Risk Manager", "effort": "Low", "scoreReduction": -2},
-                    {"id": "a3", "title": "Re-run agent evaluation after remediation", "detail": "Once remediation steps are completed trigger agent re-evaluation to confirm issue is resolved.", "owner": "Agent", "effort": "Low", "scoreReduction": -5}
-                ]
-            )
-            db.add(risk_event)
-            db.commit()
-        except Exception as e:
-            print(f"[RISK EVENT CREATION FAILED] {e}")
-            db.rollback()
-
-    return task
+    try:
+        return agent_service.create_task_and_risk_event(db, agent_id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.patch("/{agent_id}/tasks/{task_id}", response_model=AgentTaskResponse)
 def update_task(
     agent_id: str,
     task_id: str,
-    payload: dict,
+    payload: AgentTaskUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     task = db.query(AgentTask).filter(AgentTask.id == task_id, AgentTask.agent_id == agent_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    for k, v in payload.items():
-        if hasattr(task, k):
-            setattr(task, k, v)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(task, k, v)
     db.commit()
     db.refresh(task)
     return task
@@ -287,23 +218,19 @@ def get_agent_timeline(
 def get_agent_logs(
     agent_id: str,
     view: str = "detail",
+    run_id: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return (
-        db.query(AgentLog)
-        .filter(AgentLog.agent_id == agent_id, AgentLog.view == view)
-        .order_by(AgentLog.created_at.asc())
-        .all()
-    )
+    q = db.query(AgentLog).filter(AgentLog.agent_id == agent_id, AgentLog.view == view)
+    if run_id:
+        q = q.filter(AgentLog.run_id == run_id)
+    return q.order_by(AgentLog.created_at.asc()).offset(skip).limit(limit).all()
 
 
-class AgentLogCreate(BaseModel):
-    type: str
-    message: str
-    detail: Optional[str] = None
-    run_id: Optional[str] = None
-    run_date: Optional[str] = None
+
 
 
 @router.post("/{agent_id}/logs", response_model=AgentLogResponse, status_code=status.HTTP_201_CREATED)
@@ -342,7 +269,7 @@ def run_agent(agent_id: str, db: Session = Depends(get_db)):
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    script_path = r"C:\Users\Angad\OneDrive\Desktop\Agent\GmailAgent\ConsultingAgent.py"
+    script_path = settings.agent_script_path
 
     if not os.path.exists(script_path):
         raise HTTPException(status_code=500, detail=f"Agent script not found at {script_path}.")
@@ -388,8 +315,6 @@ def stop_agent(agent_id: str, db: Session = Depends(get_db)):
 
 # ── Run Specific Task ──────────────────────────────────────
 
-class RunTaskPayload(BaseModel):
-    task_name: str
 
 
 @router.post("/{agent_id}/run-task")
@@ -398,7 +323,7 @@ def run_specific_task(agent_id: str, payload: RunTaskPayload, db: Session = Depe
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    script_path = r"C:\Users\Angad\OneDrive\Desktop\Agent\GmailAgent\ConsultingAgent.py"
+    script_path = settings.agent_script_path
 
     if not os.path.exists(script_path):
         raise HTTPException(status_code=500, detail="Agent script not found")

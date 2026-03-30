@@ -123,3 +123,37 @@ class AgentTimelineResponse(BaseModel):
     status: str
 
     model_config = {"from_attributes": True}
+
+
+# ── Request schemas (moved from routers/agents.py) ─────────
+
+class AgentTaskCreate(BaseModel):
+    title: str
+    supplier: Optional[str] = None
+    priority: Optional[str] = "Medium"
+    status: Optional[str] = "Open"
+    due_date: Optional[str] = None
+    description: Optional[str] = None
+    view: Optional[str] = "list"
+    run_id: Optional[str] = None
+    run_date: Optional[str] = None
+
+
+class AgentLogCreate(BaseModel):
+    type: str
+    message: str
+    detail: Optional[str] = None
+    run_id: Optional[str] = None
+    run_date: Optional[str] = None
+
+
+class RunTaskPayload(BaseModel):
+    task_name: str
+
+
+class AgentTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    assignee: Optional[str] = None
+    description: Optional[str] = None

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from typing import List, Any
 from ..database import get_db
 from ..models.library import Organisation, Division, SupplierNode, SystemNode
 from ..models.user import User
+from ..models.vendor import Vendor
 from ..schemas.library import (
     GraphResponse, OrgNode, DivisionResponse, DivisionCreate,
     SupplierNodeResponse, SupplierNodeCreate, SupplierNodeUpdate,
@@ -13,6 +15,9 @@ from ..schemas.library import (
     HealthcareStageResponse,
 )
 from ..dependencies import get_current_user
+from ..services.vendor_service import mirror_supplier_to_vendor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/library", tags=["library"])
 
@@ -128,31 +133,14 @@ def create_supplier_node(
 
     # ── Mirror into vendors table so TPRM page picks it up ──
     try:
-        from ..models.vendor import Vendor
-        existing = db.query(Vendor).filter(Vendor.name == payload.name).first()
-        if not existing:
-            stage = getattr(payload, "stage", None) or "Acquisition"
-            stage_colors = {
-                "Acquisition": "#0EA5E9",
-                "Retention":   "#10B981",
-                "Upgradation": "#F59E0B",
-                "Offboarding": "#94A3B8",
-            }
-            vendor = Vendor(
-                id=str(uuid.uuid4()),
-                name=payload.name,
-                email=getattr(payload, "email", "") or "",
-                stage=stage,
-                stage_color=stage_colors.get(stage, "#64748B"),
-                score=50,
-                risk="Medium",
-                risk_color="#64748B",
-                assessment="pending",
-            )
-            db.add(vendor)
-            db.commit()
+        mirror_supplier_to_vendor(
+            db,
+            name=payload.name,
+            email=getattr(payload, "email", "") or "",
+            stage=getattr(payload, "stage", "Acquisition") or "Acquisition",
+        )
     except Exception as e:
-        print(f"[VENDOR MIRROR FAILED] {e}")
+        logger.error(f"Vendor mirror failed: {e}")
         db.rollback()
 
     return node

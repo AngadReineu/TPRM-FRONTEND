@@ -378,7 +378,7 @@ function StakeholderMap({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent:
 }
 
 /* ═══════════════════════════════════════════════════════════
-   AGENT DETAIL VIEW
+  AGENT DETAIL VIEW
 ══════════════════════════════════════════════════════════════ */
 
 function AgentDetailView({

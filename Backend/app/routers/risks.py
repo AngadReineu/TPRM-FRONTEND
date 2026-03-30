@@ -1,15 +1,21 @@
+import collections
+import logging
+from copy import deepcopy
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, String
 from typing import List, Optional
-from datetime import datetime
 import json
 
 from ..database import get_db
 from ..models.risk_event import RiskEvent
+from ..models.vendor import Vendor
 from ..schemas.risk_event import RiskEventResponse, RiskEventCreate, ActionItem
 from ..dependencies import get_current_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/risk", tags=["risks"])
 
 @router.get("/events", response_model=List[RiskEventResponse])
@@ -88,7 +94,6 @@ def update_risk_event_status(id: str, payload: dict, db: Session = Depends(get_d
 
 @router.patch("/events/{id}/actions")
 def update_risk_event_actions(id: str, payload: dict, db: Session = Depends(get_db)):
-    from sqlalchemy import String
     event = db.query(RiskEvent).filter(func.cast(RiskEvent.id, String) == id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Risk event not found")
@@ -103,7 +108,6 @@ def update_risk_event_actions(id: str, payload: dict, db: Session = Depends(get_
 
 @router.post("/events/{id}/actions/{action_id}/execute")
 def execute_risk_action(id: str, action_id: str, db: Session = Depends(get_db)):
-    from sqlalchemy import String
     event = db.query(RiskEvent).filter(func.cast(RiskEvent.id, String) == id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Risk event not found")
@@ -119,7 +123,6 @@ def execute_risk_action(id: str, action_id: str, db: Session = Depends(get_db)):
             
     if updated:
         # Reassign to force SQLAlchemy to understand JSON column was modified
-        from copy import deepcopy
         event.actions = deepcopy(actions)
         db.commit()
         
@@ -129,8 +132,6 @@ def execute_risk_action(id: str, action_id: str, db: Session = Depends(get_db)):
 
 @router.get("/trends")
 def get_risk_trends(db: Session = Depends(get_db)):
-    from ..models.vendor import Vendor
-    import collections
     vendors = db.query(Vendor).all()
     if not vendors or len(vendors) < 3:
         return [

@@ -12,6 +12,7 @@ from ..models.user import User
 from ..schemas.control import ControlCreate, ControlUpdate, ControlResponse
 from ..dependencies import get_current_user, get_client_ip
 from ..services.audit import AuditService
+from ..config import settings
 
 router = APIRouter(prefix="/controls", tags=["controls"])
 
@@ -99,7 +100,7 @@ def delete_control(
     AuditService.log(db, current_user, "Control Updated", control.name,
                      f"Control '{control.name}' deleted", get_client_ip(request), status="Warning")
 
-UPLOAD_DIR = "uploads/controls"
+UPLOAD_DIR = settings.upload_dir_controls
 
 @router.get("/{control_id}/documents")
 def list_documents(control_id: str, db: Session = Depends(get_db)):
