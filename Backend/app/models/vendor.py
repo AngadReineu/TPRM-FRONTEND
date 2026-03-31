@@ -11,6 +11,11 @@ class Vendor(Base):
     name              = Column(String, nullable=False)
     email             = Column(String, nullable=False)
 
+    # Contact info
+    mobile            = Column(String, nullable=True)
+    gst_number        = Column(String, nullable=True)
+    pan_number        = Column(String, nullable=True)
+
     # Lifecycle
     stage             = Column(String, default="Acquisition")   # Acquisition | Retention | Upgradation | Offboarding
     stage_color       = Column(String, default="#0EA5E9")
@@ -35,6 +40,9 @@ class Vendor(Base):
     agent_id          = Column(String, nullable=True)           # e.g. "a1"
     internal_spoc     = Column(String, nullable=True)
     external_spoc     = Column(String, nullable=True)
+
+    # Stakeholder matrix — JSON: {"internal": [{"label": "...", "email": "..."}], "supplier": [...]}
+    stakeholder_matrix = Column(JSON, nullable=True)
 
     last_activity     = Column(String, default="just now")
 

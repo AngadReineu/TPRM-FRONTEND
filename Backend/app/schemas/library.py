@@ -138,7 +138,7 @@ class SystemNodeUpdate(BaseModel):
 
 
 class GraphResponse(BaseModel):
-    org: OrgNode
+    org: Optional[OrgNode]
     divisions: List[DivisionResponse]
     suppliers: List[SupplierNodeResponse]
     systems: List[SystemNodeResponse]

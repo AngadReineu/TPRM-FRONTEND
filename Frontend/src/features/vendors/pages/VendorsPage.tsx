@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
-import { Eye, Bell, RefreshCw, Trash2, Loader2, Plus, X, Users, ShieldAlert, ClipboardCheck, Shield, ShieldOff, Settings2 } from 'lucide-react';
+import { Eye, Bell, RefreshCw, Trash2, Loader2, Plus, X, Users, ShieldAlert, ClipboardCheck, Shield, ShieldOff, Settings2, Check, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SearchInput } from '../../../components/common/SearchInput';
@@ -13,6 +13,31 @@ import { getVendors, deleteVendor, createVendor, updateVendor } from '../service
 import { getDivisions } from '../../library/services/library.data';
 import { AssessmentBadge } from '../components/AssessmentBadge';
 import { SupplierDetailModal } from '../components/SupplierDetailModal';
+
+/* ── Validation helpers ─────────────────────────────────── */
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidMobile = (mobile: string) => /^[6-9]\d{9}$/.test(mobile.replace(/\s/g, ''));
+const isValidGST = (gst: string) => 
+  gst === '' || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst.toUpperCase());
+const isValidPAN = (pan: string) => 
+  pan === '' || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan.toUpperCase());
+
+const fieldClass = (isValid: boolean, value: string) =>
+  `w-full border rounded-lg text-sm py-2.5 px-3 outline-none focus:ring-2 ${
+    value && !isValid 
+      ? 'border-red-300 focus:ring-red-200' 
+      : value && isValid 
+      ? 'border-emerald-300 focus:ring-emerald-200'
+      : 'border-slate-200 focus:ring-sky-200'
+  }`;
+
+/* ── Contact types ─────────────────────────────────────── */
+interface Contact {
+  id: string;
+  label: string;
+  email: string;
+  isDefault: boolean;
+}
 
 /* ── Create Supplier Modal ─────────────────────── */
 interface DepartmentOption {
@@ -41,16 +66,13 @@ function CreateSupplierModal({
     panNumber: '',
     contractStart: '',
     contractEnd: '',
-    // Internal stakeholders
-    businessOwner: '',
-    financeContact: '',
-    projectManager: '',
-    escalationContact: '',
-    // Supplier stakeholders
-    accountManager: '',
-    supplierFinance: '',
-    supplierEscalation: '',
   });
+  const [internalContacts, setInternalContacts] = useState<Contact[]>([
+    { id: 'default-internal', label: 'Business Owner', email: '', isDefault: true }
+  ]);
+  const [supplierContacts, setSupplierContacts] = useState<Contact[]>([
+    { id: 'default-supplier', label: 'Account Manager', email: '', isDefault: true }
+  ]);
   const [submitting, setSubmitting] = useState(false);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [loadingDepts, setLoadingDepts] = useState(true);
@@ -99,14 +121,49 @@ function CreateSupplierModal({
     }));
   }
 
+  // Contact management helpers
+  function addContact(side: 'internal' | 'supplier') {
+    const newContact: Contact = {
+      id: crypto.randomUUID(),
+      label: '',
+      email: '',
+      isDefault: false,
+    };
+    if (side === 'internal') {
+      setInternalContacts(prev => [...prev, newContact]);
+    } else {
+      setSupplierContacts(prev => [...prev, newContact]);
+    }
+  }
+
+  function removeContact(side: 'internal' | 'supplier', id: string) {
+    if (side === 'internal') {
+      setInternalContacts(prev => prev.filter(c => c.id !== id));
+    } else {
+      setSupplierContacts(prev => prev.filter(c => c.id !== id));
+    }
+  }
+
+  function updateContact(side: 'internal' | 'supplier', id: string, field: 'label' | 'email', value: string) {
+    const setter = side === 'internal' ? setInternalContacts : setSupplierContacts;
+    setter(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+  }
+
+  // Validation
+  const isFormValid = 
+    form.name.trim().length > 0 &&
+    isValidEmail(form.email) &&
+    form.departmentId !== '' &&
+    (!form.phone || isValidMobile(form.phone)) &&
+    (!form.gstNumber || isValidGST(form.gstNumber)) &&
+    (!form.panNumber || isValidPAN(form.panNumber)) &&
+    internalContacts[0].email !== '' && isValidEmail(internalContacts[0].email) &&
+    supplierContacts[0].email !== '' && isValidEmail(supplierContacts[0].email);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim()) {
-      toast.error('Please fill in supplier name and email');
-      return;
-    }
-    if (!form.departmentId) {
-      toast.error('Please select a department');
+    if (!isFormValid) {
+      toast.error('Please fill in all required fields correctly');
       return;
     }
 
@@ -116,6 +173,9 @@ function CreateSupplierModal({
       const vendorData = {
         name: form.name.trim(),
         email: form.email.trim(),
+        mobile: form.phone || undefined,
+        gstNumber: form.gstNumber || undefined,
+        panNumber: form.panNumber || undefined,
         stage: form.stage,
         stageColor: stageColors[form.stage],
         score: 50,
@@ -125,10 +185,14 @@ function CreateSupplierModal({
         pii: { configured: false },
         contractEnd: form.contractEnd || undefined,
         contractWarning: false,
-        internalSpoc: form.businessOwner || undefined,
-        externalSpoc: form.accountManager || undefined,
+        internalSpoc: internalContacts[0]?.email || undefined,
+        externalSpoc: supplierContacts[0]?.email || undefined,
         divisionId: form.departmentId,
         divisionName: selectedDept?.name,
+        stakeholderMatrix: {
+          internal: internalContacts.filter(c => c.email).map(c => ({ label: c.label, email: c.email })),
+          supplier: supplierContacts.filter(c => c.email).map(c => ({ label: c.label, email: c.email })),
+        },
       };
 
       const created = await createVendor(vendorData);
@@ -145,7 +209,7 @@ function CreateSupplierModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900">Add Supplier</h2>
           <button
@@ -246,7 +310,7 @@ function CreateSupplierModal({
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g., XYZ Corporation"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className={fieldClass(form.name.trim().length > 0, form.name)}
             />
           </div>
 
@@ -255,13 +319,27 @@ function CreateSupplierModal({
             <label className="block text-sm font-semibold text-slate-700 mb-1">
               Email <span className="text-red-500">*</span>
             </label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              placeholder="contact@company.com"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
+            <div className="relative">
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="contact@company.com"
+                className={fieldClass(isValidEmail(form.email), form.email)}
+              />
+              {form.email && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {isValidEmail(form.email) ? (
+                    <Check size={16} className="text-emerald-500" />
+                  ) : (
+                    <AlertCircle size={16} className="text-red-400" />
+                  )}
+                </span>
+              )}
+            </div>
+            {form.email && !isValidEmail(form.email) && (
+              <p className="text-xs text-red-500 mt-1">Invalid email format</p>
+            )}
           </div>
 
           {/* Contact Person */}
@@ -276,16 +354,30 @@ function CreateSupplierModal({
             />
           </div>
 
-          {/* Phone */}
+          {/* Phone (Mobile) */}
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Phone</label>
-            <input
-              type="tel"
-              value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="+91 98765 43210"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Mobile</label>
+            <div className="relative">
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="9876543210"
+                className={fieldClass(!form.phone || isValidMobile(form.phone), form.phone)}
+              />
+              {form.phone && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {isValidMobile(form.phone) ? (
+                    <Check size={16} className="text-emerald-500" />
+                  ) : (
+                    <AlertCircle size={16} className="text-red-400" />
+                  )}
+                </span>
+              )}
+            </div>
+            {form.phone && !isValidMobile(form.phone) && (
+              <p className="text-xs text-red-500 mt-1">Invalid mobile number (10 digits starting with 6-9)</p>
+            )}
           </div>
 
           {/* Website */}
@@ -304,21 +396,51 @@ function CreateSupplierModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">GST Number</label>
-              <input
-                type="text"
-                value={form.gstNumber}
-                onChange={e => setForm(f => ({ ...f, gstNumber: e.target.value }))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={form.gstNumber}
+                  onChange={e => setForm(f => ({ ...f, gstNumber: e.target.value.toUpperCase() }))}
+                  placeholder="22AAAAA0000A1Z5"
+                  className={fieldClass(isValidGST(form.gstNumber), form.gstNumber)}
+                />
+                {form.gstNumber && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {isValidGST(form.gstNumber) ? (
+                      <Check size={16} className="text-emerald-500" />
+                    ) : (
+                      <AlertCircle size={16} className="text-red-400" />
+                    )}
+                  </span>
+                )}
+              </div>
+              {form.gstNumber && !isValidGST(form.gstNumber) && (
+                <p className="text-xs text-red-500 mt-1">Invalid GST format</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">PAN Number</label>
-              <input
-                type="text"
-                value={form.panNumber}
-                onChange={e => setForm(f => ({ ...f, panNumber: e.target.value }))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={form.panNumber}
+                  onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase() }))}
+                  placeholder="ABCDE1234F"
+                  className={fieldClass(isValidPAN(form.panNumber), form.panNumber)}
+                />
+                {form.panNumber && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {isValidPAN(form.panNumber) ? (
+                      <Check size={16} className="text-emerald-500" />
+                    ) : (
+                      <AlertCircle size={16} className="text-red-400" />
+                    )}
+                  </span>
+                )}
+              </div>
+              {form.panNumber && !isValidPAN(form.panNumber) && (
+                <p className="text-xs text-red-500 mt-1">Invalid PAN format</p>
+              )}
             </div>
           </div>
 
@@ -354,90 +476,146 @@ function CreateSupplierModal({
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-1 h-4 bg-violet-500 rounded-full" />
-              <label className="text-sm font-semibold text-slate-700">Stakeholder Matrix</label>
+              <label className="text-sm font-semibold text-slate-700">
+                Stakeholder Matrix <span className="text-red-500">*</span>
+              </label>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {/* Internal */}
-              <div>
-                <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-2">Internal</p>
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Business Owner</label>
-                    <input
-                      type="email"
-                      value={form.businessOwner}
-                      onChange={e => setForm(f => ({ ...f, businessOwner: e.target.value }))}
-                      placeholder="email@abc.co"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Finance Contact</label>
-                    <input
-                      type="email"
-                      value={form.financeContact}
-                      onChange={e => setForm(f => ({ ...f, financeContact: e.target.value }))}
-                      placeholder="email@abc.co"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Project Manager</label>
-                    <input
-                      type="email"
-                      value={form.projectManager}
-                      onChange={e => setForm(f => ({ ...f, projectManager: e.target.value }))}
-                      placeholder="email@abc.co"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Escalation Contact</label>
-                    <input
-                      type="email"
-                      value={form.escalationContact}
-                      onChange={e => setForm(f => ({ ...f, escalationContact: e.target.value }))}
-                      placeholder="email@abc.co"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
+              {/* Internal Contacts */}
+              <div className="pr-3 border-r border-slate-100">
+                <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-3">Internal</p>
+                <div className="flex flex-col gap-3">
+                  {internalContacts.map(contact => (
+                    <div key={contact.id}>
+                      {contact.isDefault ? (
+                        <span className="text-xs font-semibold text-sky-600 bg-blue-50 px-2 py-0.5 rounded mb-1.5 inline-block">
+                          {contact.label}
+                        </span>
+                      ) : (
+                        <input
+                          type="text"
+                          value={contact.label}
+                          onChange={e => updateContact('internal', contact.id, 'label', e.target.value)}
+                          placeholder="Role label (e.g. Finance, Legal)"
+                          className="text-xs font-semibold text-slate-600 mb-1 border-none bg-transparent outline-none w-full"
+                        />
+                      )}
+                      <div className="flex gap-1.5 items-center">
+                        <div className="relative flex-1">
+                          <input
+                            type="email"
+                            value={contact.email}
+                            onChange={e => updateContact('internal', contact.id, 'email', e.target.value)}
+                            placeholder="email@company.com"
+                            className={`w-full border rounded-lg text-xs py-2 px-2.5 outline-none focus:ring-1 pr-8 ${
+                              contact.email && !isValidEmail(contact.email)
+                                ? 'border-red-300 focus:ring-red-200'
+                                : contact.email && isValidEmail(contact.email)
+                                ? 'border-emerald-300 focus:ring-emerald-200'
+                                : 'border-slate-200 focus:ring-sky-400'
+                            }`}
+                          />
+                          {contact.email && (
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                              {isValidEmail(contact.email) ? (
+                                <Check size={14} className="text-emerald-500" />
+                              ) : (
+                                <AlertCircle size={14} className="text-red-400" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {!contact.isDefault && (
+                          <button
+                            type="button"
+                            onClick={() => removeContact('internal', contact.id)}
+                            className="text-slate-300 hover:text-red-400 text-lg font-bold bg-transparent border-none cursor-pointer px-1"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      {contact.isDefault && contact.email && !isValidEmail(contact.email) && (
+                        <p className="text-[10px] text-red-500 mt-0.5">Invalid email</p>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => addContact('internal')}
+                    className="flex items-center gap-1 text-xs text-sky-500 border border-dashed border-sky-200 rounded-lg px-2.5 py-1.5 w-full justify-center hover:bg-blue-50 cursor-pointer bg-transparent mt-1"
+                  >
+                    + Add Contact
+                  </button>
                 </div>
               </div>
 
-              {/* Supplier */}
-              <div>
-                <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-2">Supplier</p>
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Account Manager</label>
-                    <input
-                      type="email"
-                      value={form.accountManager}
-                      onChange={e => setForm(f => ({ ...f, accountManager: e.target.value }))}
-                      placeholder="email@supplier.com"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Supplier Finance</label>
-                    <input
-                      type="email"
-                      value={form.supplierFinance}
-                      onChange={e => setForm(f => ({ ...f, supplierFinance: e.target.value }))}
-                      placeholder="email@supplier.com"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Supplier Escalation</label>
-                    <input
-                      type="email"
-                      value={form.supplierEscalation}
-                      onChange={e => setForm(f => ({ ...f, supplierEscalation: e.target.value }))}
-                      placeholder="email@supplier.com"
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
+              {/* Supplier Contacts */}
+              <div className="pl-3">
+                <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-3">Supplier</p>
+                <div className="flex flex-col gap-3">
+                  {supplierContacts.map(contact => (
+                    <div key={contact.id}>
+                      {contact.isDefault ? (
+                        <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded mb-1.5 inline-block">
+                          {contact.label}
+                        </span>
+                      ) : (
+                        <input
+                          type="text"
+                          value={contact.label}
+                          onChange={e => updateContact('supplier', contact.id, 'label', e.target.value)}
+                          placeholder="Role label (e.g. Finance, Legal)"
+                          className="text-xs font-semibold text-slate-600 mb-1 border-none bg-transparent outline-none w-full"
+                        />
+                      )}
+                      <div className="flex gap-1.5 items-center">
+                        <div className="relative flex-1">
+                          <input
+                            type="email"
+                            value={contact.email}
+                            onChange={e => updateContact('supplier', contact.id, 'email', e.target.value)}
+                            placeholder="email@supplier.com"
+                            className={`w-full border rounded-lg text-xs py-2 px-2.5 outline-none focus:ring-1 pr-8 ${
+                              contact.email && !isValidEmail(contact.email)
+                                ? 'border-red-300 focus:ring-red-200'
+                                : contact.email && isValidEmail(contact.email)
+                                ? 'border-emerald-300 focus:ring-emerald-200'
+                                : 'border-slate-200 focus:ring-sky-400'
+                            }`}
+                          />
+                          {contact.email && (
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                              {isValidEmail(contact.email) ? (
+                                <Check size={14} className="text-emerald-500" />
+                              ) : (
+                                <AlertCircle size={14} className="text-red-400" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {!contact.isDefault && (
+                          <button
+                            type="button"
+                            onClick={() => removeContact('supplier', contact.id)}
+                            className="text-slate-300 hover:text-red-400 text-lg font-bold bg-transparent border-none cursor-pointer px-1"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      {contact.isDefault && contact.email && !isValidEmail(contact.email) && (
+                        <p className="text-[10px] text-red-500 mt-0.5">Invalid email</p>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => addContact('supplier')}
+                    className="flex items-center gap-1 text-xs text-amber-500 border border-dashed border-amber-200 rounded-lg px-2.5 py-1.5 w-full justify-center hover:bg-amber-50 cursor-pointer bg-transparent mt-1"
+                  >
+                    + Add Contact
+                  </button>
                 </div>
               </div>
             </div>
@@ -467,8 +645,8 @@ function CreateSupplierModal({
             </button>
             <button
               type="submit"
-              disabled={submitting}
-              className="flex-1 px-4 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={submitting || !isFormValid}
+              className="flex-1 px-4 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 size={16} className="animate-spin" />}
               {submitting ? 'Creating...' : 'Add Supplier →'}

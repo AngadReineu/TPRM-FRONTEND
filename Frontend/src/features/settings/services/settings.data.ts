@@ -1,5 +1,6 @@
 import { api } from '@/lib/api';
 import { withFallback, toCamelCase, toSnakeCase } from '@/lib/apiUtils';
+import { useAuthStore } from '@/stores/authStore';
 import type {
   OrgSettings,
   IntegrationSettings,
@@ -12,57 +13,58 @@ import type {
 } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock Data (fallback)
+// Get default empty settings
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOCK_ORG_SETTINGS: OrgSettings = {
-  orgName: 'ABC Insurance Company',
-  industry: 'Healthcare / Insurance',
-  headquarters: 'Mumbai, India',
-  cinNumber: 'U66000MH2015PLC123456',
-  irdaiLicenseNumber: 'IRDAI/HLT/2015/123',
-  primaryContactEmail: 'risk@abcinsurance.in',
-  logoUrl: '',
+const getDefaultOrgSettings = (): OrgSettings => {
+  const user = useAuthStore.getState().user;
+  return {
+    orgName: user?.org_name || '',
+    industry: user?.industry || 'Technology',
+    headquarters: '',
+    cinNumber: '',
+    irdaiLicenseNumber: '',
+    primaryContactEmail: user?.email || '',
+    logoUrl: '',
+  };
 };
 
-const MOCK_INTEGRATIONS: IntegrationSettings[] = [
-  { id: 'azure-ad', name: 'Azure AD', description: 'Single sign-on with Microsoft Azure Active Directory', icon: 'azure', enabled: true, status: 'connected', lastSync: '2 min ago' },
-  { id: 'slack', name: 'Slack', description: 'Real-time notifications and alerts', icon: 'slack', enabled: true, status: 'connected', lastSync: '5 min ago' },
-  { id: 'jira', name: 'Jira', description: 'Sync risk items with Jira tickets', icon: 'jira', enabled: false, status: 'disconnected' },
-  { id: 'servicenow', name: 'ServiceNow', description: 'Integration with ServiceNow ITSM', icon: 'servicenow', enabled: false, status: 'disconnected' },
-];
+const DEFAULT_INTEGRATIONS: IntegrationSettings[] = [];
 
-const MOCK_NOTIFICATION_SETTINGS: NotificationSettings = {
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   emailNotifications: true,
   riskAlerts: true,
   assessmentReminders: true,
-  weeklyDigest: true,
-  slackIntegration: true,
+  weeklyDigest: false,
+  slackIntegration: false,
   teamsIntegration: false,
 };
 
-const MOCK_COMPLIANCE_SETTINGS: ComplianceSettings = {
+const DEFAULT_COMPLIANCE_SETTINGS: ComplianceSettings = {
   riskThreshold: 70,
   autoEscalation: true,
   assessmentFrequency: 'quarterly',
   dataRetentionDays: 365,
-  enabledFrameworks: ['ISO 27001', 'SOC 2', 'GDPR', 'DPDPA', 'IRDAI'],
+  enabledFrameworks: [],
 };
 
-const MOCK_AI_CONFIG: AIConfigSettings = {
-  enableAI: true,
+const DEFAULT_AI_CONFIG: AIConfigSettings = {
+  enableAI: false,
   modelVersion: 'gpt-4o',
-  autoRecommendations: true,
+  autoRecommendations: false,
   confidenceThreshold: 0.75,
   maxTokens: 4096,
 };
 
-const MOCK_PORTAL_SETTINGS: PortalSettings = {
-  portalName: 'ABC Insurance TPRM Portal',
-  brandColor: '#0EA5E9',
-  supportEmail: 'support@abcinsurance.in',
-  termsUrl: 'https://abcinsurance.in/terms',
-  privacyUrl: 'https://abcinsurance.in/privacy',
+const getDefaultPortalSettings = (): PortalSettings => {
+  const user = useAuthStore.getState().user;
+  return {
+    portalName: (user?.org_name || '') + ' TPRM Portal',
+    brandColor: '#0EA5E9',
+    supportEmail: user?.email || '',
+    termsUrl: '',
+    privacyUrl: '',
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,27 +72,27 @@ const MOCK_PORTAL_SETTINGS: PortalSettings = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getOrgSettings(): OrgSettings {
-  return MOCK_ORG_SETTINGS;
+  return getDefaultOrgSettings();
 }
 
 export function getIntegrations(): IntegrationSettings[] {
-  return MOCK_INTEGRATIONS;
+  return DEFAULT_INTEGRATIONS;
 }
 
 export function getNotificationSettings(): NotificationSettings {
-  return MOCK_NOTIFICATION_SETTINGS;
+  return DEFAULT_NOTIFICATION_SETTINGS;
 }
 
 export function getComplianceSettings(): ComplianceSettings {
-  return MOCK_COMPLIANCE_SETTINGS;
+  return DEFAULT_COMPLIANCE_SETTINGS;
 }
 
 export function getAIConfigSettings(): AIConfigSettings {
-  return MOCK_AI_CONFIG;
+  return DEFAULT_AI_CONFIG;
 }
 
 export function getPortalSettings(): PortalSettings {
-  return MOCK_PORTAL_SETTINGS;
+  return getDefaultPortalSettings();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,12 +109,12 @@ export async function fetchSettings(): Promise<AllSettings> {
       return toCamelCase<AllSettings>(data);
     },
     () => ({
-      org: MOCK_ORG_SETTINGS,
-      integrations: MOCK_INTEGRATIONS,
-      notifications: MOCK_NOTIFICATION_SETTINGS,
-      compliance: MOCK_COMPLIANCE_SETTINGS,
-      aiConfig: MOCK_AI_CONFIG,
-      portal: MOCK_PORTAL_SETTINGS,
+      org: getDefaultOrgSettings(),
+      integrations: DEFAULT_INTEGRATIONS,
+      notifications: DEFAULT_NOTIFICATION_SETTINGS,
+      compliance: DEFAULT_COMPLIANCE_SETTINGS,
+      aiConfig: DEFAULT_AI_CONFIG,
+      portal: getDefaultPortalSettings(),
     }),
     'Settings'
   );
@@ -127,7 +129,7 @@ export async function fetchOrgSettings(): Promise<OrgSettings> {
       const data = await api.get<OrgSettings>('/settings/org');
       return toCamelCase<OrgSettings>(data);
     },
-    () => MOCK_ORG_SETTINGS,
+    () => getDefaultOrgSettings(),
     'Settings/Org'
   );
 }
@@ -141,7 +143,7 @@ export async function fetchNotificationSettings(): Promise<NotificationSettings>
       const data = await api.get<NotificationSettings>('/settings/notifications');
       return toCamelCase<NotificationSettings>(data);
     },
-    () => MOCK_NOTIFICATION_SETTINGS,
+    () => DEFAULT_NOTIFICATION_SETTINGS,
     'Settings/Notifications'
   );
 }
@@ -155,7 +157,7 @@ export async function fetchComplianceSettings(): Promise<ComplianceSettings> {
       const data = await api.get<ComplianceSettings>('/settings/compliance');
       return toCamelCase<ComplianceSettings>(data);
     },
-    () => MOCK_COMPLIANCE_SETTINGS,
+    () => DEFAULT_COMPLIANCE_SETTINGS,
     'Settings/Compliance'
   );
 }
@@ -169,7 +171,7 @@ export async function fetchAIConfigSettings(): Promise<AIConfigSettings> {
       const data = await api.get<AIConfigSettings>('/settings/ai-config');
       return toCamelCase<AIConfigSettings>(data);
     },
-    () => MOCK_AI_CONFIG,
+    () => DEFAULT_AI_CONFIG,
     'Settings/AIConfig'
   );
 }
@@ -183,7 +185,7 @@ export async function fetchPortalSettings(): Promise<PortalSettings> {
       const data = await api.get<PortalSettings>('/settings/portal');
       return toCamelCase<PortalSettings>(data);
     },
-    () => MOCK_PORTAL_SETTINGS,
+    () => getDefaultPortalSettings(),
     'Settings/Portal'
   );
 }

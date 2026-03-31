@@ -44,7 +44,11 @@ def create_vendor(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    vendor = Vendor(id=str(uuid.uuid4()), **payload.model_dump())
+    data = payload.model_dump()
+    # Convert StakeholderMatrix pydantic model to dict for JSON column
+    if data.get('stakeholder_matrix') and payload.stakeholder_matrix:
+        data['stakeholder_matrix'] = payload.stakeholder_matrix.model_dump()
+    vendor = Vendor(id=str(uuid.uuid4()), **data)
     recalculate_vendor_risk(vendor)
     db.add(vendor)
     db.commit()
@@ -63,7 +67,12 @@ def update_vendor(
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    # Convert StakeholderMatrix pydantic model to dict for JSON column
+    if 'stakeholder_matrix' in update_data and payload.stakeholder_matrix:
+        update_data['stakeholder_matrix'] = payload.stakeholder_matrix.model_dump()
+
+    for field, value in update_data.items():
         setattr(vendor, field, value)
 
     recalculate_vendor_risk(vendor)

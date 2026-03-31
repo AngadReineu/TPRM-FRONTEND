@@ -29,11 +29,42 @@ def get_graph(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    org = db.query(Organisation).first()
+    # Check if user has an org, if not return empty graph
+    if not current_user.org_id:
+        return GraphResponse(
+            org=None,
+            divisions=[],
+            suppliers=[],
+            systems=[],
+        )
+    
+    # Try to get org from library Organisation table
+    org = db.query(Organisation).filter(Organisation.id == current_user.org_id).first()
+    
+    # If no library org record exists, create a basic one from user's org
     if not org:
-        raise HTTPException(status_code=404, detail="Organisation not initialised")
+        from ..models.organisation import Organisation as UserOrg
+        user_org = db.query(UserOrg).filter(UserOrg.id == current_user.org_id).first()
+        if user_org:
+            org = Organisation(
+                id=user_org.id,
+                name=user_org.name,
+                canvas_x=400,
+                canvas_y=300,
+            )
+            db.add(org)
+            db.commit()
+            db.refresh(org)
+    
+    if not org:
+        return GraphResponse(
+            org=None,
+            divisions=[],
+            suppliers=[],
+            systems=[],
+        )
 
-    divisions  = db.query(Division).all()
+    divisions  = db.query(Division).filter(Division.org_id == current_user.org_id).all() if hasattr(Division, 'org_id') else db.query(Division).all()
     suppliers  = db.query(SupplierNode).all()
     systems    = db.query(SystemNode).all()
 

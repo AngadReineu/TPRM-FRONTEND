@@ -140,15 +140,6 @@ export function LoginPage() {
             </Link>
           </p>
         </div>
-
-        {/* Demo credentials */}
-        <div className="mt-6 p-4 bg-slate-100 rounded-xl border border-slate-200">
-          <p className="text-xs font-medium text-slate-600 mb-2">Demo credentials:</p>
-          <div className="text-xs text-slate-500 space-y-1">
-            <div><span className="font-mono">priya@abc.co</span> / <span className="font-mono">password123</span></div>
-            <div><span className="font-mono">raj@abc.co</span> / <span className="font-mono">password123</span></div>
-          </div>
-        </div>
       </div>
     </div>
   );

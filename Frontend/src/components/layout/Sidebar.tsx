@@ -155,20 +155,28 @@ export function Sidebar() {
 
       {/* ── Bottom user profile ───────────────────────── */}
       <div className="border-t border-slate-100 py-3 px-4 flex items-center gap-2.5 shrink-0 bg-slate-50/60">
-        {/* Avatar with gradient */}
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0EA5E9] to-[#6366F1] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
+        {/* Avatar with gradient - clickable to profile */}
+        <button
+          onClick={() => navigate('/profile')}
+          className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0EA5E9] to-[#6366F1] flex items-center justify-center text-white text-[11px] font-bold shrink-0 border-0 cursor-pointer hover:opacity-90 transition-opacity"
+          title="View Profile"
+        >
           {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
-        </div>
+        </button>
 
-        {/* Name + org */}
-        <div className="flex-1 min-w-0">
+        {/* Name + org - clickable to profile */}
+        <button
+          onClick={() => navigate('/profile')}
+          className="flex-1 min-w-0 text-left bg-transparent border-0 cursor-pointer hover:opacity-80 transition-opacity p-0"
+          title="View Profile"
+        >
           <div className="text-xs font-semibold text-slate-700 truncate">
             {user?.name || 'User'}
           </div>
           <div className="text-[11px] text-slate-400 truncate">
             {user?.org_name || 'Organization'} · {user?.role || 'User'}
           </div>
-        </div>
+        </button>
 
         {/* Logout */}
         <button

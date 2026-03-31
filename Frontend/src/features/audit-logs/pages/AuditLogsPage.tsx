@@ -48,8 +48,6 @@ export function AuditLogsPage() {
         <input type="date" className="px-3 py-2 text-[13px] border border-slate-200 rounded-lg outline-none text-slate-700" />
         <select className="px-3 py-2 text-[13px] border border-slate-200 rounded-lg outline-none bg-white text-slate-700">
           <option>All Users</option>
-          <option>Priya Sharma</option>
-          <option>Raj Kumar</option>
           <option>System</option>
         </select>
         <select className="px-3 py-2 text-[13px] border border-slate-200 rounded-lg outline-none bg-white text-slate-700">

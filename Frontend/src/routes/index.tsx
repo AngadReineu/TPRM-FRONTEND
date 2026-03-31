@@ -4,6 +4,7 @@ import { ProtectedRoute } from '../components/common/ProtectedRoute';
 
 import { LoginPage }             from '../features/auth/pages/LoginPage';
 import { RegisterPage }          from '../features/auth/pages/RegisterPage';
+import { ProfilePage }           from '../features/auth/pages/ProfilePage';
 import { DashboardPage }         from '../features/dashboard/pages/DashboardPage';
 import { LibraryPage }           from '../features/library/pages/LibraryPage';
 import { LibraryHealthcarePage } from '../features/library/pages/LibraryHealthcarePage';
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
       { path: 'audit-logs',            Component: AuditLogsPage },
       { path: 'roles',                 Component: RolesPage },
       { path: 'settings',              Component: SettingsPage },
+      { path: 'profile',               Component: ProfilePage },
       { path: '*',                     Component: NotFound },
     ],
   },

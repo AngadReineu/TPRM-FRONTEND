@@ -27,14 +27,12 @@ const userColors = ['#0EA5E9', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444'];
 function normalizeLogEntry(log: LogEntry): LogEntry {
   return {
     ...log,
-    // Use ipAddress from backend if available, otherwise use ip
     ip: log.ipAddress || log.ip,
-    // Use createdAt from backend if available, otherwise use ts
     ts: log.createdAt || log.ts,
   };
 }
 
-/** Get audit logs from API with fallback to mock data */
+/** Get audit logs from API with fallback to empty array */
 export async function getLogs(filter?: AuditLogsFilter): Promise<LogEntry[]> {
   const queryParams = new URLSearchParams();
   if (filter?.user) queryParams.append('user', filter.user);
@@ -57,7 +55,9 @@ export async function getLogs(filter?: AuditLogsFilter): Promise<LogEntry[]> {
 }
 
 /** Legacy sync getter for backwards compatibility */
-
+export function getLogsSync(): LogEntry[] {
+  return DEFAULT_LOGS;
+}
 
 export function getActionColors() {
   return actionColors;
