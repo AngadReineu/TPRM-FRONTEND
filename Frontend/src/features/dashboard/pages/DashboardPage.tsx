@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
   TrendingUp, AlertCircle, ChevronRight,
-  Package, ShieldAlert, Bot, FileText, ScanSearch,
-  Activity, Zap, Loader2,
+  Package, ShieldAlert, FileText, ScanSearch,
+  Zap, Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import {
@@ -16,11 +16,11 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { WidgetCard } from '../components/WidgetCard';
 import { WidgetHeader } from '../components/WidgetHeader';
 import { KpiWidget } from '../components/KpiWidget';
-import { SegmentBar } from '../components/SegmentBar';
 import { PulseDot } from '../components/PulseDot';
 
 import { getDesignTokens, getDashboardSummary, MOCK_DASHBOARD_DATA } from '../services/dashboard.data';
 import type { DashboardSummary } from '../types';
+import { useAuthStore } from '../../../stores/authStore';
 
 const token = getDesignTokens();
 
@@ -47,8 +47,8 @@ function DashboardSkeleton() {
       </WidgetCard>
 
       {/* KPI Row Skeleton */}
-      <div className="grid grid-cols-5 gap-5">
-        {[...Array(5)].map((_, i) => (
+      <div className="grid grid-cols-4 gap-5">
+        {[...Array(4)].map((_, i) => (
           <WidgetCard key={i} className="!p-5">
             <div className="flex items-center gap-2 mb-3">
               <Skeleton className="h-8 w-8 rounded-lg" />
@@ -78,18 +78,7 @@ function DashboardSkeleton() {
       </div>
 
       {/* Operations Row Skeleton */}
-      <div className="grid gap-5 grid-cols-[3fr_2fr]">
-        <WidgetCard>
-          <Skeleton className="h-5 w-32 mb-4" />
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3 py-2">
-              <Skeleton className="h-8 w-8 rounded-full" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-3 w-32 flex-1" />
-            </div>
-          ))}
-        </WidgetCard>
+      <div className="grid gap-5 grid-cols-1">
         <WidgetCard>
           <Skeleton className="h-5 w-36 mb-4" />
           {[...Array(5)].map((_, i) => (
@@ -108,8 +97,17 @@ function DashboardSkeleton() {
    ══════════════════════════════════════════════════════ */
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [data, setData] = useState<DashboardSummary>(MOCK_DASHBOARD_DATA);
   const [loading, setLoading] = useState(true);
+
+  // Get greeting based on time
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -144,18 +142,14 @@ export function DashboardPage() {
 
   const {
     totalVendors,
-    activeAgents,
     openRisks,
     avgRiskScore,
     controlsActive,
     controlsTotal,
     riskTrend,
     stageBreakdown,
-    agentActivity,
     recentAlerts,
   } = data;
-
-  const liveAgents = agentActivity.filter(a => a.isActive).length;
 
   return (
     <div className="flex flex-col gap-7 max-w-[1280px]">
@@ -165,10 +159,10 @@ export function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[19px] font-extrabold text-slate-900 tracking-tight">
-              Good morning, Priya
+              {getGreeting()}, {user?.name || 'User'}
             </div>
             <div className="text-[13px] text-slate-500 mt-[3px]">
-              ABC Insurance Company &middot; Healthcare &middot; Mumbai
+              {user?.org_name || 'Organization'} {user?.industry ? `· ${user.industry}` : ''}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -190,7 +184,7 @@ export function DashboardPage() {
       </WidgetCard>
 
       {/* -- KPI Row -- */}
-      <div className="grid grid-cols-5 gap-5">
+      <div className="grid grid-cols-4 gap-5">
 
         <KpiWidget
           icon={<Package size={15} />}
@@ -223,19 +217,6 @@ export function DashboardPage() {
         />
 
         <KpiWidget
-          icon={<Bot size={15} />}
-          iconBg="#ECFDF5" iconColor="#10B981"
-          label="Active Agents"
-          value={activeAgents}
-          liveIndicator
-          sub={<span>{liveAgents} monitoring &middot; {activeAgents - liveAgents} idle</span>}
-          barPct={undefined}
-          sparkData={undefined}
-        >
-          <SegmentBar active={controlsActive} total={controlsTotal} />
-        </KpiWidget>
-
-        <KpiWidget
           icon={<FileText size={15} />}
           iconBg="#FFFBEB" iconColor="#F59E0B"
           label="Assessments"
@@ -253,7 +234,7 @@ export function DashboardPage() {
         <KpiWidget
           icon={<ScanSearch size={15} />}
           iconBg="#FEF2F2" iconColor="#EF4444"
-          label="Truth Gap Alerts"
+          label="Risk Alerts"
           value={6}
           valueColor="#EF4444"
           sub={
@@ -350,50 +331,7 @@ export function DashboardPage() {
       </div>
 
       {/* -- Operations Row -- */}
-      <div className="grid gap-5 grid-cols-[3fr_2fr]">
-
-        {/* Agent Activity */}
-        <WidgetCard>
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-[30px] h-[30px] rounded-lg bg-emerald-50 flex items-center justify-center">
-                <Activity size={15} color="#10B981" />
-              </div>
-              <span className="text-[15px] font-bold text-slate-900 tracking-tight">Agent Activity</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <PulseDot />
-              <span className="text-xs text-emerald-500 font-semibold">{liveAgents} agents live</span>
-            </div>
-          </div>
-          <div>
-            {agentActivity.map((agent, idx) => (
-              <div
-                key={agent.name}
-                className="flex items-center gap-[13px] px-2 py-2.5 rounded-lg cursor-pointer hover:bg-[#F8FAFC] transition-colors"
-                style={{
-                  borderBottom: idx < agentActivity.length - 1 ? `1px solid ${token.border}` : 'none',
-                }}
-              >
-                {/* Avatar with live dot */}
-                <div className="relative shrink-0">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold"
-                    style={{ backgroundColor: agent.color }}
-                  >
-                    {agent.initials}
-                  </div>
-                  {agent.isActive && (
-                    <span className="absolute bottom-0 -right-px w-[9px] h-[9px] rounded-full bg-emerald-500 border-2 border-white" />
-                  )}
-                </div>
-                <div className="text-[13px] font-bold text-slate-700 min-w-[68px]">{agent.name}</div>
-                <StageBadge stage={agent.stage} />
-                <div className="text-xs flex-1" style={{ color: agent.statusColor }}>{agent.status}</div>
-              </div>
-            ))}
-          </div>
-        </WidgetCard>
+      <div className="grid gap-5 grid-cols-1">
 
         {/* Recent Risk Alerts */}
         <WidgetCard>

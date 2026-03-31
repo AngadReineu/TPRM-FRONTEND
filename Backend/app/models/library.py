@@ -35,6 +35,7 @@ class SupplierNode(Base):
     __tablename__ = "supplier_nodes"
 
     id              = Column(String, primary_key=True, index=True)
+    org_id          = Column(String, nullable=True, index=True)
     division_id     = Column(String, ForeignKey("divisions.id"), nullable=False, index=True)
     canvas_x        = Column(Float, default=200.0)
     canvas_y        = Column(Float, default=200.0)
@@ -73,6 +74,7 @@ class SystemNode(Base):
     __tablename__ = "system_nodes"
 
     id                    = Column(String, primary_key=True, index=True)
+    org_id                = Column(String, nullable=True, index=True)
     division_id           = Column(String, ForeignKey("divisions.id"), nullable=False, index=True)
     canvas_x              = Column(Float, default=200.0)
     canvas_y              = Column(Float, default=200.0)

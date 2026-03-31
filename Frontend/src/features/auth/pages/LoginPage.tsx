@@ -136,7 +136,7 @@ export function LoginPage() {
           <p className="mt-6 text-center text-sm text-slate-500">
             Don't have an account?{' '}
             <Link to="/register" className="text-sky-500 hover:underline font-medium">
-              Create one
+              Register →
             </Link>
           </p>
         </div>

@@ -6,6 +6,9 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  org_id: string;
+  org_name: string;
+  industry?: string;
   avatar?: string;
   status: string;
 }

@@ -84,7 +84,7 @@ export const authApi = {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    return api.get<{ id: string; name: string; email: string; role: string; avatar?: string; status: string }>(
+    return api.get<{ id: string; name: string; email: string; role: string; org_id: string; org_name: string; industry?: string; avatar?: string; status: string }>(
       '/auth/me',
       { headers }
     );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
-import { Eye, Bell, RefreshCw, Trash2, Loader2, Plus, X } from 'lucide-react';
+import { Eye, Bell, RefreshCw, Trash2, Loader2, Plus, X, Users, ShieldAlert, ClipboardCheck, Shield, ShieldOff, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SearchInput } from '../../../components/common/SearchInput';
@@ -8,11 +8,10 @@ import { StageBadge } from '../../../components/common/StageBadge';
 import { ConfigurePiiModal } from '../components/ConfigurePiiModal';
 
 import type { Supplier, AssessmentStatus } from '../types';
-import type { Stage } from '../../../types/shared';
-import { getVendors, deleteVendor, createVendor } from '../services/vendors.data';
+import type { Stage, PiiFlow } from '../../../types/shared';
+import { getVendors, deleteVendor, createVendor, updateVendor } from '../services/vendors.data';
 import { getDivisions } from '../../library/services/library.data';
 import { AssessmentBadge } from '../components/AssessmentBadge';
-import { PIIColumn } from '../components/PIIColumn';
 import { SupplierDetailModal } from '../components/SupplierDetailModal';
 
 /* ── Create Supplier Modal ─────────────────────── */
@@ -481,14 +480,56 @@ function CreateSupplierModal({
   );
 }
 
-/* ── Lifecycle group definitions ─────────────────────── */
-const LIFECYCLE_GROUPS: { label: string; stages: Stage[]; color: string; bg: string }[] = [
-  { label: 'Customer Acquisition', stages: ['Acquisition'],                color: '#0EA5E9', bg: 'bg-blue-50' },
-  { label: 'Customer Retention',   stages: ['Retention'],                  color: '#10B981', bg: 'bg-emerald-50' },
-  { label: 'Operations',           stages: ['Upgradation', 'Offboarding'], color: '#64748B', bg: 'bg-slate-50' },
-];
+/* ── KPI Card component ─────────────────────────────────── */
+function KpiCard({ 
+  icon, 
+  iconBg, 
+  iconColor, 
+  value, 
+  label 
+}: { 
+  icon: React.ReactNode; 
+  iconBg: string; 
+  iconColor: string; 
+  value: number; 
+  label: string;
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <div className="flex items-center gap-3 mb-3">
+        <div 
+          className="w-10 h-10 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: iconBg }}
+        >
+          <div style={{ color: iconColor }}>{icon}</div>
+        </div>
+      </div>
+      <div className="text-2xl font-bold text-slate-900">{value}</div>
+      <div className="text-sm text-slate-500 mt-1">{label}</div>
+    </div>
+  );
+}
 
-const TABLE_HEADERS = ['Supplier', 'Stage', 'Risk Score', 'Assessment', 'PII Sharing', 'Contract End', 'Agent', 'Last Activity', 'Actions'];
+/* ── Flow Badge component ─────────────────────────────────── */
+function FlowBadge({ flow }: { flow?: PiiFlow }) {
+  if (!flow) return <span className="text-slate-400 text-xs">—</span>;
+  
+  const styles: Record<PiiFlow, { bg: string; text: string }> = {
+    Share: { bg: 'bg-sky-50', text: 'text-sky-600' },
+    Ingest: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+    Both: { bg: 'bg-violet-50', text: 'text-violet-600' },
+  };
+  
+  const style = styles[flow] || styles.Share;
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
+      {flow}
+    </span>
+  );
+}
+
+/* ── Table Headers ─────────────────────────────────────────── */
+const TABLE_HEADERS = ['Supplier', 'Stage', 'Risk Score', 'Assessment', 'PII Sharing', 'Flow', 'Contract End', 'Agent', 'Last Activity', 'Actions'];
 
 export function VendorsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -527,13 +568,21 @@ export function VendorsPage() {
     return matchSearch && matchStage && matchRisk;
   });
 
+  // Split by PII configuration
+  const piiConfigured = filtered.filter(s => s.pii.configured === true);
+  const piiNotConfigured = filtered.filter(s => s.pii.configured === false);
+
+  // KPI calculations
+  const highRiskCount = suppliers.filter(s => s.risk === 'High' || s.risk === 'Critical').length;
+  const assessmentsDueCount = suppliers.filter(s => s.assessment === 'overdue' || s.assessment === 'pending').length;
+  const piiConfiguredCount = suppliers.filter(s => s.pii.configured === true).length;
+
   async function handleRemove(s: Supplier) {
     try {
       await deleteVendor(s.id);
       setSuppliers(prev => prev.filter(x => x.id !== s.id));
       toast.error(`${s.name} removed from TPRM`);
     } catch (err) {
-      // Still remove locally even if API fails (optimistic UI with fallback)
       setSuppliers(prev => prev.filter(x => x.id !== s.id));
       toast.error(`${s.name} removed from TPRM`);
     }
@@ -575,16 +624,58 @@ export function VendorsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 max-w-[1200px]">
+    <div className="flex flex-col gap-6 max-w-[1280px]">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 m-0">Third Party Risk Management</h1>
           <p className="text-sm text-slate-500 mt-1 mb-0">{suppliers.length} suppliers across 4 stages</p>
         </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-sky-500 text-white text-sm font-medium rounded-lg hover:bg-sky-600 transition-colors"
+        >
+          <Plus size={16} />
+          Add Supplier
+        </button>
+      </div>
 
-        {/* Search + Filters + Add Button */}
-        <div className="flex gap-2 flex-wrap">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-4 gap-4">
+        <KpiCard
+          icon={<Users size={20} />}
+          iconBg="#EFF6FF"
+          iconColor="#0EA5E9"
+          value={suppliers.length}
+          label="Total Suppliers"
+        />
+        <KpiCard
+          icon={<ShieldAlert size={20} />}
+          iconBg="#FEF2F2"
+          iconColor="#EF4444"
+          value={highRiskCount}
+          label="High Risk"
+        />
+        <KpiCard
+          icon={<ClipboardCheck size={20} />}
+          iconBg="#FFFBEB"
+          iconColor="#F59E0B"
+          value={assessmentsDueCount}
+          label="Assessments Due"
+        />
+        <KpiCard
+          icon={<Shield size={20} />}
+          iconBg="#ECFDF5"
+          iconColor="#10B981"
+          value={piiConfiguredCount}
+          label="PII Configured"
+        />
+      </div>
+
+      {/* Filters Row */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-slate-500">{filtered.length} suppliers</span>
+        <div className="flex gap-2">
           <SearchInput
             value={search}
             onChange={setSearch}
@@ -609,25 +700,35 @@ export function VendorsPage() {
               <option key={s}>{s}</option>
             ))}
           </select>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-sky-500 text-white text-sm font-medium rounded-lg hover:bg-sky-600 transition-colors"
-          >
-            <Plus size={16} />
-            Add Supplier
-          </button>
         </div>
       </div>
 
-      {/* Table */}
+      {/* PII Configured Section */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        {/* Section Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center">
+              <Shield size={18} className="text-emerald-500" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">PII Data Sharing — Configured</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Suppliers with active data sharing configurations</p>
+            </div>
+          </div>
+          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+            {piiConfigured.length} suppliers
+          </span>
+        </div>
+
+        {/* Table */}
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               {TABLE_HEADERS.map(h => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-[11px] font-medium text-slate-500 uppercase tracking-wider text-left whitespace-nowrap"
+                  className="px-4 py-2.5 text-[11px] font-medium text-slate-400 uppercase tracking-wider text-left whitespace-nowrap"
                 >
                   {h}
                 </th>
@@ -635,153 +736,275 @@ export function VendorsPage() {
             </tr>
           </thead>
           <tbody>
-            {LIFECYCLE_GROUPS.map(grp => {
-              const rows = filtered.filter(s => grp.stages.includes(s.stage));
-              if (rows.length === 0) return null;
-              return (
-                <React.Fragment key={grp.label}>
-                  {/* Group header */}
-                  <tr>
-                    <td colSpan={9} className={`px-4 py-2 border-b border-t border-slate-200 ${grp.bg}`}>
-                      <span
-                        className="text-[11px] font-bold uppercase tracking-widest"
-                        style={{ color: grp.color }}
-                      >
-                        {grp.label}
-                      </span>
-                      <span
-                        className="text-[11px] ml-1.5 opacity-70"
-                        style={{ color: grp.color }}
-                      >
-                        &middot; {rows.length} supplier{rows.length !== 1 ? 's' : ''}
-                      </span>
-                    </td>
-                  </tr>
-
-                  {/* Supplier rows */}
-                  {rows.map((s, idx) => (
-                    <tr
-                      key={s.id}
-                      className={`hover:bg-slate-50 ${idx < rows.length - 1 ? 'border-b border-[#F1F5F9]' : ''}`}
-                    >
-                      {/* Supplier name + email */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
+            {piiConfigured.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-400">
+                  No suppliers with PII configured
+                </td>
+              </tr>
+            ) : (
+              piiConfigured.map((s, idx) => (
+                <tr
+                  key={s.id}
+                  className={`hover:bg-slate-50/80 ${idx < piiConfigured.length - 1 ? 'border-b border-slate-100' : ''}`}
+                >
+                  {/* Supplier */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg flex items-center justify-center text-slate-600 text-xs font-bold shrink-0">
+                        {s.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
                         <div className="text-sm font-semibold text-slate-900">{s.name}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">{s.email}</div>
-                      </td>
-
-                      {/* Stage */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
-                        <StageBadge stage={s.stage} />
-                      </td>
-
-                      {/* Risk Score */}
-                      <td className="px-4 py-3 text-sm align-middle">
-                        <span className="text-sm font-bold" style={{ color: s.riskColor }}>
-                          {s.score}
-                        </span>
-                      </td>
-
-                      {/* Assessment */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
-                        <AssessmentBadge status={s.assessment} />
-                      </td>
-
-                      {/* PII Sharing */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
-                        <PIIColumn 
-                          pii={s.pii} 
-                          assessment={s.assessment} 
-                          piiFlow={s.piiFlow} 
-                          onConfigure={() => setConfigureSupplier(s)}
-                        />
-                      </td>
-
-                      {/* Contract End */}
-                      <td className="px-4 py-3 text-sm align-middle">
+                        <div className="text-xs text-slate-400">{s.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  {/* Stage */}
+                  <td className="px-4 py-3 align-middle">
+                    <StageBadge stage={s.stage} />
+                  </td>
+                  {/* Risk Score */}
+                  <td className="px-4 py-3 align-middle">
+                    <div>
+                      <span className="text-sm font-bold" style={{ color: s.riskColor }}>{s.score}</span>
+                      <div className="w-16 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
                         <div
-                          className={`text-sm ${
-                            s.contractWarning ? 'text-amber-500 font-semibold' : 'text-slate-700 font-normal'
-                          }`}
-                        >
-                          {s.contractEnd}
-                          {s.contractWarning && (
-                            <span className="ml-1.5 text-[11px] bg-amber-50 text-amber-500 px-1.5 py-px rounded font-medium">
-                              Expiring
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Agent */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
-                        <span className="text-xs font-semibold text-sky-500 bg-blue-50 px-2.5 py-0.5 rounded-full">
-                          {s.agentId}
+                          className="h-full rounded-full"
+                          style={{ width: `${s.score}%`, backgroundColor: s.riskColor }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  {/* Assessment */}
+                  <td className="px-4 py-3 align-middle">
+                    <AssessmentBadge status={s.assessment} />
+                  </td>
+                  {/* PII Sharing */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                      <span className="text-xs text-emerald-600 font-medium">Active</span>
+                    </div>
+                  </td>
+                  {/* Flow */}
+                  <td className="px-4 py-3 align-middle">
+                    <FlowBadge flow={s.piiFlow} />
+                  </td>
+                  {/* Contract End */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className={`text-sm ${s.contractWarning ? 'text-amber-500 font-semibold' : 'text-slate-700'}`}>
+                      {s.contractEnd}
+                      {s.contractWarning && (
+                        <span className="ml-1.5 text-[10px] bg-amber-50 text-amber-500 px-1.5 py-0.5 rounded font-medium">
+                          Expiring
                         </span>
-                      </td>
-
-                      {/* Last Activity */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
-                        <span className="text-xs text-slate-400">{s.lastActivity}</span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-3 text-sm text-slate-700 align-middle">
-                        <div className="flex gap-0.5">
-                          <button
-                            onClick={() => setViewSupplier(s)}
-                            title="View details"
-                            className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-sky-500 hover:bg-blue-50"
-                          >
-                            <Eye size={14} />
-                          </button>
-                          <button
-                            onClick={() => toast.success(`Reminder sent to ${s.name}`)}
-                            title="Send reminder"
-                            className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-amber-500 hover:bg-amber-50"
-                          >
-                            <Bell size={14} />
-                          </button>
-                          <button
-                            onClick={() => toast.success(`Assessment refreshed for ${s.name}`)}
-                            title="Refresh assessment"
-                            className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-emerald-500 hover:bg-emerald-50"
-                          >
-                            <RefreshCw size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleRemove(s)}
-                            title="Remove supplier"
-                            className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-red-500 hover:bg-red-50"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </React.Fragment>
-              );
-            })}
+                      )}
+                    </div>
+                  </td>
+                  {/* Agent */}
+                  <td className="px-4 py-3 align-middle">
+                    <span className="text-xs font-semibold text-sky-500 bg-sky-50 px-2 py-0.5 rounded-full">
+                      {s.agentId}
+                    </span>
+                  </td>
+                  {/* Last Activity */}
+                  <td className="px-4 py-3 align-middle">
+                    <span className="text-xs text-slate-400">{s.lastActivity}</span>
+                  </td>
+                  {/* Actions */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className="flex gap-0.5">
+                      <button
+                        onClick={() => setViewSupplier(s)}
+                        title="View details"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-sky-500 hover:bg-sky-50"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        onClick={() => toast.success(`Reminder sent to ${s.name}`)}
+                        title="Send reminder"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-amber-500 hover:bg-amber-50"
+                      >
+                        <Bell size={14} />
+                      </button>
+                      <button
+                        onClick={() => toast.success(`Assessment refreshed for ${s.name}`)}
+                        title="Refresh assessment"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-emerald-500 hover:bg-emerald-50"
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleRemove(s)}
+                        title="Remove supplier"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
+      </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
-          <span className="text-sm text-slate-500">
-            Showing {filtered.length} of {suppliers.length} suppliers
-          </span>
-          <div className="flex gap-1.5">
-            {['Prev', 'Next'].map(label => (
-              <button
-                key={label}
-                className="text-sm text-slate-500 bg-white border border-slate-200 rounded-md px-3 py-1.5 cursor-pointer hover:bg-slate-50"
-              >
-                {label}
-              </button>
-            ))}
+      {/* PII Not Configured Section */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        {/* Section Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center">
+              <ShieldOff size={18} className="text-slate-400" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">PII Not Configured</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Suppliers pending data sharing setup</p>
+            </div>
           </div>
+          <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+            {piiNotConfigured.length} suppliers
+          </span>
         </div>
+
+        {/* Table */}
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              {TABLE_HEADERS.map(h => (
+                <th
+                  key={h}
+                  className="px-4 py-2.5 text-[11px] font-medium text-slate-400 uppercase tracking-wider text-left whitespace-nowrap"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {piiNotConfigured.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-400">
+                  All suppliers have PII configured
+                </td>
+              </tr>
+            ) : (
+              piiNotConfigured.map((s, idx) => (
+                <tr
+                  key={s.id}
+                  className={`hover:bg-slate-50/80 ${idx < piiNotConfigured.length - 1 ? 'border-b border-slate-100' : ''}`}
+                >
+                  {/* Supplier */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg flex items-center justify-center text-slate-600 text-xs font-bold shrink-0">
+                        {s.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{s.name}</div>
+                        <div className="text-xs text-slate-400">{s.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  {/* Stage */}
+                  <td className="px-4 py-3 align-middle">
+                    <StageBadge stage={s.stage} />
+                  </td>
+                  {/* Risk Score */}
+                  <td className="px-4 py-3 align-middle">
+                    <div>
+                      <span className="text-sm font-bold" style={{ color: s.riskColor }}>{s.score}</span>
+                      <div className="w-16 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${s.score}%`, backgroundColor: s.riskColor }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  {/* Assessment */}
+                  <td className="px-4 py-3 align-middle">
+                    <AssessmentBadge status={s.assessment} />
+                  </td>
+                  {/* PII Sharing */}
+                  <td className="px-4 py-3 align-middle">
+                    {s.assessment === 'complete' ? (
+                      <button
+                        onClick={() => setConfigureSupplier(s)}
+                        className="text-xs font-medium text-sky-500 hover:text-sky-600 hover:underline"
+                      >
+                        Configure →
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">Assessment required</span>
+                    )}
+                  </td>
+                  {/* Flow */}
+                  <td className="px-4 py-3 align-middle">
+                    <span className="text-slate-400 text-xs">—</span>
+                  </td>
+                  {/* Contract End */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className={`text-sm ${s.contractWarning ? 'text-amber-500 font-semibold' : 'text-slate-700'}`}>
+                      {s.contractEnd}
+                      {s.contractWarning && (
+                        <span className="ml-1.5 text-[10px] bg-amber-50 text-amber-500 px-1.5 py-0.5 rounded font-medium">
+                          Expiring
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  {/* Agent */}
+                  <td className="px-4 py-3 align-middle">
+                    <span className="text-xs font-semibold text-sky-500 bg-sky-50 px-2 py-0.5 rounded-full">
+                      {s.agentId}
+                    </span>
+                  </td>
+                  {/* Last Activity */}
+                  <td className="px-4 py-3 align-middle">
+                    <span className="text-xs text-slate-400">{s.lastActivity}</span>
+                  </td>
+                  {/* Actions */}
+                  <td className="px-4 py-3 align-middle">
+                    <div className="flex gap-0.5">
+                      <button
+                        onClick={() => setViewSupplier(s)}
+                        title="View details"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-sky-500 hover:bg-sky-50"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        onClick={() => setConfigureSupplier(s)}
+                        title="Configure PII"
+                        className="p-1.5 rounded bg-transparent border-none text-sky-500 cursor-pointer hover:text-sky-600 hover:bg-sky-50"
+                      >
+                        <Settings2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => toast.success(`Reminder sent to ${s.name}`)}
+                        title="Send reminder"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-amber-500 hover:bg-amber-50"
+                      >
+                        <Bell size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleRemove(s)}
+                        title="Remove supplier"
+                        className="p-1.5 rounded bg-transparent border-none text-slate-400 cursor-pointer hover:text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* Modals / Panels */}

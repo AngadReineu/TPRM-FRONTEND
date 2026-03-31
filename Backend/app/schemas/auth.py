@@ -28,3 +28,11 @@ class UserResponse(BaseModel):
     status: str
 
     model_config = {"from_attributes": True}
+
+
+class RegisterPayload(BaseModel):
+    org_name: str
+    industry: str
+    name: str
+    email: str
+    password: str

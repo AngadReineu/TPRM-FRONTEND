@@ -7,6 +7,7 @@ class Vendor(Base):
     __tablename__ = "vendors"
 
     id                = Column(String, primary_key=True, index=True)
+    org_id            = Column(String, nullable=True, index=True)
     name              = Column(String, nullable=False)
     email             = Column(String, nullable=False)
 

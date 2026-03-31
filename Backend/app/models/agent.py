@@ -8,6 +8,7 @@ class Agent(Base):
     __tablename__ = "agents"
 
     id            = Column(String, primary_key=True, index=True)
+    org_id        = Column(String, nullable=True, index=True)
     name          = Column(String, nullable=False)
     initials      = Column(String, nullable=False)
     status        = Column(String, default="idle")        # live | active | syncing | idle

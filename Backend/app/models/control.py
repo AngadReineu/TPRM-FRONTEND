@@ -7,6 +7,7 @@ class Control(Base):
     __tablename__ = "controls"
 
     id                   = Column(String, primary_key=True, index=True)
+    org_id               = Column(String, nullable=True, index=True)
     name                 = Column(String, nullable=False)
     desc                 = Column(String, nullable=True)
 

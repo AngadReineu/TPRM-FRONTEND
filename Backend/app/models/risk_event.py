@@ -8,6 +8,7 @@ class RiskEvent(Base):
     __tablename__ = "risk_events"
     
     id            = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    org_id        = Column(String, nullable=True, index=True)
     created_at    = Column(DateTime, default=datetime.utcnow)
     date          = Column(String, nullable=False)           # human readable "Mar 25, 2026"
     run_id        = Column(String, nullable=True)            # agent run ID e.g. "ed70016b"
