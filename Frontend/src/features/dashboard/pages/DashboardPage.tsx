@@ -144,8 +144,14 @@ export function DashboardPage() {
     totalVendors,
     openRisks,
     avgRiskScore,
+    criticalCount,
+    highCount,
     controlsActive,
     controlsTotal,
+    assessmentsTotal,
+    assessmentsOverdue,
+    totalRiskAlerts,
+    criticalAlerts,
     riskTrend,
     stageBreakdown,
     recentAlerts,
@@ -191,12 +197,12 @@ export function DashboardPage() {
           iconBg="#EFF6FF" iconColor="#0EA5E9"
           label="Total Suppliers"
           value={totalVendors}
-          sparkData={[10, 25, 18, 40, 35, 55, 42, 60, 55, 72, 68, 85]}
+          sparkData={[10, 25, 18, 40, 35, 55, 42, 60, 55, 72, 68, totalVendors || 85]}
           sparkColor="#0EA5E9"
           sub={
             <>
               <TrendingUp size={12} color="#10B981" />
-              <span className="text-emerald-500 font-semibold">+12% vs last quarter</span>
+              <span className="text-emerald-500 font-semibold text-xs whitespace-nowrap">Active in platform</span>
             </>
           }
         />
@@ -204,46 +210,46 @@ export function DashboardPage() {
         <KpiWidget
           icon={<ShieldAlert size={15} />}
           iconBg="#FEF2F2" iconColor="#EF4444"
-          label="High Risk"
-          value={openRisks}
+          label="High Risk Suppliers"
+          value={highCount + criticalCount}
           valueColor="#EF4444"
           sub={
             <>
               <AlertCircle size={12} color="#F59E0B" />
-              <span>3 require immediate attention</span>
+              <span>{criticalCount} critical rating</span>
             </>
           }
-          barPct={Math.round((openRisks / totalVendors) * 100)} barColor="#EF4444" barBg="#FEE2E2"
+          barPct={totalVendors ? Math.round(((highCount + criticalCount) / totalVendors) * 100) : 0} barColor="#EF4444" barBg="#FEE2E2"
         />
 
         <KpiWidget
           icon={<FileText size={15} />}
           iconBg="#FFFBEB" iconColor="#F59E0B"
           label="Assessments"
-          value={23}
+          value={assessmentsTotal || 0}
           valueColor="#D97706"
           sub={
             <>
               <AlertCircle size={12} color="#F59E0B" />
-              <span>5 overdue &gt;30 days</span>
+              <span>{assessmentsOverdue} overdue &gt;30 days</span>
             </>
           }
-          barPct={48} barColor="#F59E0B" barBg="#FEF9C3"
+          barPct={assessmentsTotal ? Math.round(((assessmentsTotal - assessmentsOverdue) / assessmentsTotal) * 100) : 0} barColor="#F59E0B" barBg="#FEF9C3"
         />
 
         <KpiWidget
           icon={<ScanSearch size={15} />}
           iconBg="#FEF2F2" iconColor="#EF4444"
           label="Risk Alerts"
-          value={6}
+          value={totalRiskAlerts || 0}
           valueColor="#EF4444"
           sub={
             <>
               <AlertCircle size={12} color="#EF4444" />
-              <span className="text-red-500 font-semibold">2 require investigation</span>
+              <span className="text-red-500 font-semibold">{criticalAlerts} require investigation</span>
             </>
           }
-          barPct={40} barColor="#EF4444" barBg="#FEE2E2"
+          barPct={totalRiskAlerts ? Math.round((criticalAlerts / totalRiskAlerts) * 100) : 0} barColor="#EF4444" barBg="#FEE2E2"
         />
       </div>
 

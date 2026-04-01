@@ -467,3 +467,21 @@ export async function getDivisions(): Promise<Division[]> {
   const graphData = await getGraphData();
   return graphData.divisions;
 }
+
+/**
+ * Fetch all systems from the backend.
+ */
+export async function getSystems(): Promise<SystemNode[]> {
+  const result = await withFallback(
+    async () => toCamelCase(await api.get<unknown[]>('/library/systems')),
+    INIT_SYSTEMS.map(s => ({ ...s })),
+    'systems-list'
+  );
+  
+  // Normalize coordinates
+  return result.map((sys: any) => ({
+    ...sys,
+    x: sys.canvasX ?? sys.x ?? 0,
+    y: sys.canvasY ?? sys.y ?? 0,
+  }));
+}

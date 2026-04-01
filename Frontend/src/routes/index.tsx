@@ -9,6 +9,7 @@ import { DashboardPage }         from '../features/dashboard/pages/DashboardPage
 import { LibraryPage }           from '../features/library/pages/LibraryPage';
 import { LibraryHealthcarePage } from '../features/library/pages/LibraryHealthcarePage';
 import { VendorsPage }           from '../features/vendors/pages/VendorsPage';
+import { SystemsPage }           from '../features/vendors/pages/SystemsPage';
 import { RiskThreatPage }        from '../features/risk-assessment/pages/RiskThreatPage';
 import { AuditLogsPage }         from '../features/audit-logs/pages/AuditLogsPage';
 import { RolesPage }             from '../features/roles/pages/RolesPage';
@@ -44,7 +45,9 @@ export const router = createBrowserRouter([
       { index: true,                   Component: DashboardPage },
       { path: 'libraries',             Component: LibraryPage },
       { path: 'libraries/healthcare',  Component: LibraryHealthcarePage },
-      { path: 'tprm',                  Component: VendorsPage },
+      { path: 'tprm',                  element: <Navigate to="/tprm/suppliers" replace /> },
+      { path: 'tprm/suppliers',        Component: VendorsPage },
+      { path: 'tprm/systems',          Component: SystemsPage },
       { path: 'risk-threat',           Component: RiskThreatPage },
       { path: 'audit-logs',            Component: AuditLogsPage },
       { path: 'roles',                 Component: RolesPage },

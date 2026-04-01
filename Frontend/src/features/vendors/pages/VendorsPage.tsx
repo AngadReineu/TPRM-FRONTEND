@@ -9,10 +9,10 @@ import { ConfigurePiiModal } from '../components/ConfigurePiiModal';
 
 import type { Supplier, AssessmentStatus } from '../types';
 import type { Stage, PiiFlow } from '../../../types/shared';
-import { getVendors, deleteVendor, createVendor, updateVendor } from '../services/vendors.data';
-import { getDivisions } from '../../library/services/library.data';
 import { AssessmentBadge } from '../components/AssessmentBadge';
 import { SupplierDetailModal } from '../components/SupplierDetailModal';
+import { getVendors, deleteVendor, createVendor, updateVendor } from '../services/vendors.data';
+import { getDivisions } from '../../library/services/library.data';
 
 /* ── Validation helpers ─────────────────────────────────── */
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -658,6 +658,8 @@ function CreateSupplierModal({
   );
 }
 
+
+
 /* ── KPI Card component ─────────────────────────────────── */
 function KpiCard({ 
   icon, 
@@ -693,15 +695,15 @@ function FlowBadge({ flow }: { flow?: PiiFlow }) {
   if (!flow) return <span className="text-slate-400 text-xs">—</span>;
   
   const styles: Record<PiiFlow, { bg: string; text: string }> = {
-    Share: { bg: 'bg-sky-50', text: 'text-sky-600' },
-    Ingest: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
-    Both: { bg: 'bg-violet-50', text: 'text-violet-600' },
+    share: { bg: 'bg-sky-50', text: 'text-sky-600' },
+    ingest: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+    both: { bg: 'bg-violet-50', text: 'text-violet-600' },
   };
   
-  const style = styles[flow] || styles.Share;
+  const style = styles[flow] || styles.share;
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
-      {flow}
+      {flow.charAt(0).toUpperCase() + flow.slice(1)}
     </span>
   );
 }
@@ -711,22 +713,22 @@ const TABLE_HEADERS = ['Supplier', 'Stage', 'Risk Score', 'Assessment', 'PII Sha
 
 export function VendorsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
+  const [configureSupplier, setConfigureSupplier] = useState<Supplier | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('All');
   const [riskFilter, setRiskFilter] = useState('All');
-  const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
-  const [configureSupplier, setConfigureSupplier] = useState<Supplier | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     async function loadVendors() {
       try {
         setLoading(true);
         setError(null);
-        const data = await getVendors();
-        setSuppliers(data);
+        const supData = await getVendors();
+        setSuppliers(supData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load vendors');
         toast.error('Failed to load vendors');
@@ -768,7 +770,7 @@ export function VendorsPage() {
 
   async function handlePiiSave(supplierId: string, piiFlow: string, method: string, icons: string[]) {
     try {
-      const data = { piiFlow, pii: { configured: true, method, icons } };
+      const data = { piiFlow: piiFlow as PiiFlow, pii: { configured: true, method, icons } };
       const updated = await updateVendor(supplierId, data);
       setSuppliers(prev => prev.map(s => s.id === supplierId ? { ...s, piiFlow: updated.piiFlow, pii: updated.pii } as Supplier : s));
       toast.success('Data sharing configuration saved successfully');
@@ -802,12 +804,12 @@ export function VendorsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-[1280px]">
+    <div className="flex flex-col gap-6 max-w-[1280px] w-full mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 m-0">Third Party Risk Management</h1>
-          <p className="text-sm text-slate-500 mt-1 mb-0">{suppliers.length} suppliers across 4 stages</p>
+          <p className="text-sm text-slate-500 mt-1 mb-0">Manage and monitor interconnected suppliers and systems</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -817,9 +819,8 @@ export function VendorsPage() {
           Add Supplier
         </button>
       </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-4 gap-4">
         <KpiCard
           icon={<Users size={20} />}
           iconBg="#EFF6FF"
@@ -1185,6 +1186,7 @@ export function VendorsPage() {
         </table>
       </div>
 
+
       {/* Modals / Panels */}
       {showCreateModal && (
         <CreateSupplierModal
@@ -1194,6 +1196,7 @@ export function VendorsPage() {
           }}
         />
       )}
+
       {viewSupplier && (
         <SupplierDetailModal
           supplier={viewSupplier}

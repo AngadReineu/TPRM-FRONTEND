@@ -1,5 +1,5 @@
-import { api } from '@/lib/api';
-import { withFallback, toCamelCase } from '@/lib/apiUtils';
+import { api } from '../../../lib/api';
+import { withFallback, toCamelCase } from '../../../lib/apiUtils';
 import type { StageDataItem, AgentRow, RiskTrendPoint, RiskAlert, DashboardSummary } from '../types';
 
 /* ══════════════════════════════════════════════════════
@@ -67,6 +67,10 @@ export const MOCK_DASHBOARD_DATA: DashboardSummary = {
   lowCount: 13,
   controlsActive: 12,
   controlsTotal: 14,
+  assessmentsTotal: 48,
+  assessmentsOverdue: 5,
+  totalRiskAlerts: 15,
+  criticalAlerts: 3,
   riskTrend: riskTrendData,
   stageBreakdown: stageData,
   agentActivity: agentRows,

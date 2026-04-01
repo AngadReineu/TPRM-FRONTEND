@@ -5,7 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import {
   LayoutDashboard, ScanLine, ShieldCheck, AlertCircle, Scan,
   Database, BookOpen, AlertTriangle, ClipboardList,
-  Settings, LogOut, ChevronUp, ChevronDown,
+  Settings, LogOut, ChevronUp, ChevronDown, Users, Server,
 } from 'lucide-react';
 
 /* ── Item class helper ───────────────────────────────── */
@@ -105,10 +105,7 @@ export function Sidebar() {
           </svg>
         </div>
         <span className="text-xl font-extrabold text-slate-900 tracking-[-0.02em]">
-          Kyūdo
-        </span>
-        <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">
-          v2
+          TPRM
         </span>
       </div>
 
@@ -122,24 +119,28 @@ export function Sidebar() {
 
         <Divider />
 
-        {/* 2 — SECURITY SCANNER */}
-        <SectionLabel label="SECURITY SCANNER" section="SECURITY_SCANNER" collapsed={collapsed} toggle={toggle} />
-        {!collapsed['SECURITY_SCANNER'] && (
-          <div className="px-3">
-            <PlainItem icon={ScanLine}     label="Scanner Overview" indent />
-            <PlainItem icon={ShieldCheck}  label="Compliance"       indent />
-            <PlainItem icon={AlertCircle}  label="Findings"         indent />
-            <PlainItem icon={Scan}         label="Scans"            indent />
-          </div>
-        )}
 
-        <Divider />
 
         {/* 3 — ORGANIZATION DATA FLOW */}
         <SectionLabel label="ORGANIZATION DATA FLOW" section="ORG_DATA_FLOW" collapsed={collapsed} toggle={toggle} />
         {!collapsed['ORG_DATA_FLOW'] && (
           <div className="px-3">
-            <FuncItem icon={Database}      label="TPRM"        to="/tprm"        indent />
+            <div 
+               onClick={() => toggle('TPRM_MENU')}
+               className={cn(itemClass(false, false), 'justify-between font-medium text-slate-500')}
+            >
+               <div className="flex items-center gap-2.5">
+                  <Database size={16} strokeWidth={1.8} className="shrink-0" />
+                  <span>TPRM</span>
+               </div>
+               {collapsed['TPRM_MENU'] ? <ChevronDown size={13} className="opacity-50" /> : <ChevronUp size={13} className="opacity-50" />}
+            </div>
+            {!collapsed['TPRM_MENU'] && (
+               <div className="mb-1">
+                 <FuncItem icon={Users} label="Suppliers" to="/tprm/suppliers" indent sub />
+                 <FuncItem icon={Server} label="Systems" to="/tprm/systems" indent sub />
+               </div>
+            )}
             <FuncItem icon={BookOpen}      label="Library"     to="/libraries"   indent />
             <FuncItem icon={AlertTriangle} label="Risk Threat" to="/risk-threat" indent />
             <PlainItem icon={ClipboardList} label="Assessments" indent />

@@ -67,7 +67,7 @@ export function LoginPage() {
               <line x1="2" y1="13" x2="6" y2="13" stroke="#0EA5E9" strokeWidth="1.5"/>
               <line x1="20" y1="13" x2="24" y2="13" stroke="#0EA5E9" strokeWidth="1.5"/>
             </svg>
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">Kyūdo</span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">TPRM</span>
           </div>
           <p className="text-slate-500">Third-Party Risk Management</p>
         </div>

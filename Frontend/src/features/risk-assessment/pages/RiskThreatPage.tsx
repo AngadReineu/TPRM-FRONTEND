@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Lightbulb, Search, Filter } from 'lucide-react';
 import type { RiskEvent } from '../types';
-import { fetchRiskData, fetchRiskEvents, fetchAiRecommendations, getSeverityColors, getStatusColors, getRiskEvents } from '../services/risk.data';
+import { fetchRiskData, fetchRiskEvents, fetchAiRecommendations, getSeverityColors, getStatusColors } from '../services/risk.data';
 import { RiskDetailModal } from '../components/RiskDetailModal';
 
 const severityColors = getSeverityColors();
@@ -28,7 +28,7 @@ export function RiskThreatPage() {
       ]);
       setRiskData(trendRes);
       console.log('[RISK EVENTS]', eventsRes);
-      setRiskEvents(eventsRes.length > 0 ? eventsRes : getRiskEvents());
+      setRiskEvents(eventsRes);
       setAiRecommendations(aiRes);
     } catch (e) {
       console.error("Error loading risk data", e);

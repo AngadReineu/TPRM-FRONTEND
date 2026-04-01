@@ -23,11 +23,15 @@ AGENT_STATUS_COLORS = {
 }
 
 
-def build_dashboard(db: Session) -> DashboardSummary:
-    vendors   = db.query(Vendor).all()
+def build_dashboard(db: Session, org_id: str = None) -> DashboardSummary:
+    if org_id:
+        vendors   = db.query(Vendor).filter(Vendor.org_id == org_id).all()
+        risks     = db.query(RiskEvent).filter(RiskEvent.org_id == org_id).all()
+    else:
+        vendors   = db.query(Vendor).all()
+        risks     = db.query(RiskEvent).all()
     agents    = db.query(Agent).all()
     controls  = db.query(Control).all()
-    risks     = db.query(RiskEvent).all()
 
     # ── KPI counts ────────────────────────────────────────
     total_vendors   = len(vendors)
@@ -42,6 +46,12 @@ def build_dashboard(db: Session) -> DashboardSummary:
 
     controls_active = sum(1 for c in controls if c.active)
     controls_total  = len(controls)
+
+    assessments_total = total_vendors
+    assessments_overdue = sum(1 for v in vendors if v.assessment == "overdue")
+
+    total_risk_alerts = len(risks)
+    critical_alerts = sum(1 for r in risks if r.severity and r.severity.lower() == "critical")
 
     # ── Risk trend (static shape — would be time-series in production) ──
     risk_trend = [
@@ -114,6 +124,10 @@ def build_dashboard(db: Session) -> DashboardSummary:
         low_count=low,
         controls_active=controls_active,
         controls_total=controls_total,
+        assessments_total=assessments_total,
+        assessments_overdue=assessments_overdue,
+        total_risk_alerts=total_risk_alerts,
+        critical_alerts=critical_alerts,
         risk_trend=risk_trend,
         stage_breakdown=stage_breakdown,
         agent_activity=agent_activity,

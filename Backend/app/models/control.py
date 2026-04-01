@@ -67,7 +67,7 @@ class Control(Base):
 
     # Metadata
     last_eval            = Column(String, nullable=True)
-    control_source       = Column(String, default="local")  # local | kyudo | grc
+    control_source       = Column(String, default="local")  # local | tprm | grc
 
     created_at           = Column(DateTime(timezone=True), server_default=func.now())
     updated_at           = Column(DateTime(timezone=True), onupdate=func.now())

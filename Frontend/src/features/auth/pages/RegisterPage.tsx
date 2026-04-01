@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Eye, EyeOff, Mail, Lock, User, Building2, AlertCircle, ChevronDown, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { authApi } from '@/lib/api';
-import { useAuthStore } from '@/stores/authStore';
+import { authApi } from '../../../lib/api';
+import { useAuthStore } from '../../../stores/authStore';
 
 const INDUSTRIES = [
   'Healthcare',
@@ -132,7 +132,7 @@ export function RegisterPage() {
               <line x1="2" y1="13" x2="6" y2="13" stroke="#0EA5E9" strokeWidth="1.5"/>
               <line x1="20" y1="13" x2="24" y2="13" stroke="#0EA5E9" strokeWidth="1.5"/>
             </svg>
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">Kyūdo</span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">TPRM</span>
           </div>
           <p className="text-slate-500">Third-Party Risk Management</p>
         </div>

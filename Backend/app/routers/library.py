@@ -2,6 +2,7 @@ import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Any
 
 from ..database import get_db
@@ -65,8 +66,12 @@ def get_graph(
         )
 
     divisions  = db.query(Division).filter(Division.org_id == current_user.org_id).all() if hasattr(Division, 'org_id') else db.query(Division).all()
-    suppliers  = db.query(SupplierNode).all()
-    systems    = db.query(SystemNode).all()
+    suppliers  = db.query(SupplierNode).filter(
+        SupplierNode.org_id == current_user.org_id
+    ).all() if current_user.org_id else db.query(SupplierNode).all()
+    systems    = db.query(SystemNode).filter(
+        SystemNode.org_id == current_user.org_id
+    ).all() if current_user.org_id else db.query(SystemNode).all()
 
     return GraphResponse(
         org=OrgNode.model_validate(org),
@@ -157,7 +162,25 @@ def create_supplier_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = SupplierNode(id=str(uuid.uuid4()), **payload.model_dump())
+    email = getattr(payload, "email", "") or ""
+    
+    # Duplicate validation
+    query = db.query(SupplierNode).filter(func.lower(SupplierNode.name) == payload.name.lower())
+    if email:
+        query = db.query(SupplierNode).filter(
+            (func.lower(SupplierNode.name) == payload.name.lower()) | 
+            (func.lower(SupplierNode.email) == email.lower())
+        )
+        
+    existing = query.first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Supplier with this name or email already exists")
+
+    node = SupplierNode(
+        id=str(uuid.uuid4()), 
+        org_id=current_user.org_id,
+        **payload.model_dump()
+    )
     db.add(node)
     db.commit()
     db.refresh(node)
@@ -169,6 +192,7 @@ def create_supplier_node(
             name=payload.name,
             email=getattr(payload, "email", "") or "",
             stage=getattr(payload, "stage", "Acquisition") or "Acquisition",
+            org_id=current_user.org_id,
         )
     except Exception as e:
         logger.error(f"Vendor mirror failed: {e}")
@@ -214,13 +238,38 @@ def delete_supplier_node(
 
 # ── System nodes ───────────────────────────────────────────
 
+@router.get("/systems", response_model=List[SystemNodeResponse])
+def list_systems(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.org_id:
+        systems = db.query(SystemNode).filter(SystemNode.org_id == current_user.org_id).all()
+    else:
+        systems = db.query(SystemNode).all()
+    return systems
+
+
 @router.post("/systems", response_model=SystemNodeResponse, status_code=201)
 def create_system_node(
     payload: SystemNodeCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = SystemNode(id=str(uuid.uuid4()), **payload.model_dump())
+    # Duplicate validation: No same system name for the same supplier
+    if payload.linked_supplier_id:
+        existing = db.query(SystemNode).filter(
+            func.lower(SystemNode.name) == payload.name.lower(),
+            SystemNode.linked_supplier_id == payload.linked_supplier_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="A system with this name already exists for this supplier")
+
+    node = SystemNode(
+        id=str(uuid.uuid4()), 
+        org_id=current_user.org_id,
+        **payload.model_dump()
+    )
     db.add(node)
     db.commit()
     db.refresh(node)

@@ -14,6 +14,7 @@ from ..models.risk_event import RiskEvent
 from ..models.vendor import Vendor
 from ..schemas.risk_event import RiskEventResponse, RiskEventCreate, ActionItem
 from ..dependencies import get_current_user
+from ..models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/risk", tags=["risks"])
@@ -24,9 +25,12 @@ def get_risk_events(
     severity: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     run_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     q = db.query(RiskEvent)
+    if current_user.org_id:
+        q = q.filter(RiskEvent.org_id == current_user.org_id)
     if supplier_name:
         q = q.filter(RiskEvent.supplier_name.ilike(f"%{supplier_name}%"))
     if severity:

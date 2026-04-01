@@ -1,4 +1,4 @@
-import type { Stage } from '@/types/shared';
+import type { Stage } from '../../types/shared';
 
 /** A single point on the risk-trend line chart. */
 export interface RiskTrendPoint {
@@ -51,6 +51,10 @@ export interface DashboardSummary {
   lowCount: number;
   controlsActive: number;
   controlsTotal: number;
+  assessmentsTotal: number;
+  assessmentsOverdue: number;
+  totalRiskAlerts: number;
+  criticalAlerts: number;
   riskTrend: RiskTrendPoint[];
   stageBreakdown: StageDataItem[];
   agentActivity: AgentRow[];

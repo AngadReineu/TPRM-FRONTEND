@@ -12,4 +12,4 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("/summary", response_model=DashboardSummary)
 def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return build_dashboard(db)
+    return build_dashboard(db, org_id=current_user.org_id)

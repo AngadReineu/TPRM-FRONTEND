@@ -1,6 +1,6 @@
-import { api } from '@/lib/api';
-import { withFallback, toCamelCase, toSnakeCase } from '@/lib/apiUtils';
-import { useAuthStore } from '@/stores/authStore';
+import { api } from '../../../lib/api';
+import { withFallback, toCamelCase, toSnakeCase } from '../../../lib/apiUtils';
+import { useAuthStore } from '../../../stores/authStore';
 import type {
   OrgSettings,
   IntegrationSettings,

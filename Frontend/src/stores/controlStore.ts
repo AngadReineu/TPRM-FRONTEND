@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Category } from '@/types/shared';
+import type { Category } from '../types/shared';
 
 interface ControlFilters {
   search: string;

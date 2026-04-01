@@ -1,10 +1,16 @@
 import { Bell } from 'lucide-react';
+import { useAuthStore } from '../../stores/authStore';
 
 interface TopBarProps {
   title: string;
 }
 
 export function TopBar({ title }: TopBarProps) {
+  const { user } = useAuthStore();
+  const initials = user?.name 
+    ? user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() 
+    : 'U';
+
   return (
     <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 font-[Inter,sans-serif]">
       <div className="text-lg font-semibold text-slate-900">{title}</div>
@@ -14,7 +20,7 @@ export function TopBar({ title }: TopBarProps) {
           <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border-2 border-white" />
         </button>
         <div className="w-9 h-9 rounded-full bg-[#0EA5E9] flex items-center justify-center text-white text-[13px] font-bold cursor-pointer">
-          PS
+          {initials}
         </div>
       </div>
     </div>

@@ -6,9 +6,9 @@
  *   const data = await api.get<Supplier[]>('/vendors');
  */
 
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore } from '../stores/authStore';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
+const BASE_URL ='/api';
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;

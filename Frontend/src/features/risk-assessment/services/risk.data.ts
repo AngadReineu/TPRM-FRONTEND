@@ -2,19 +2,6 @@ import { api } from '../../../lib/api';
 import { withFallback, toCamelCase, toSnakeCase } from '../../../lib/apiUtils';
 import type { RiskEvent, RiskDataPoint, ActionItem, ActionUpdatePayload } from '../types';
 
-const MOCK_RISK_DATA: RiskDataPoint[] = [
-  { month: 'Aug', overall: 72, critical: 15, high: 28 },
-  { month: 'Sep', overall: 68, critical: 12, high: 25 },
-  { month: 'Oct', overall: 75, critical: 18, high: 32 },
-  { month: 'Nov', overall: 70, critical: 14, high: 30 },
-  { month: 'Dec', overall: 65, critical: 11, high: 24 },
-  { month: 'Jan', overall: 63, critical: 10, high: 22 },
-  { month: 'Feb', overall: 62, critical: 9, high: 20 },
-];
-
-const MOCK_RISK_EVENTS: RiskEvent[] = [];
-
-const MOCK_AI_RECOMMENDATIONS: string[] = [];
 
 const severityColors: Record<string, [string, string]> = {
   Critical: ['bg-red-50', 'text-red-500'],
@@ -37,18 +24,6 @@ const effortColors: Record<string, [string, string]> = {
 
 /* ── Sync getters (backward compatibility) ── */
 
-export function getRiskData() {
-  return MOCK_RISK_DATA;
-}
-
-export function getRiskEvents() {
-  return MOCK_RISK_EVENTS;
-}
-
-export function getAiRecommendations() {
-  return MOCK_AI_RECOMMENDATIONS;
-}
-
 export function getSeverityColors() {
   return severityColors;
 }
@@ -69,7 +44,7 @@ export function getEffortColors() {
 export async function fetchRiskData(): Promise<RiskDataPoint[]> {
   return withFallback(
     async () => toCamelCase(await api.get<unknown[]>('/risk/trends')),
-    MOCK_RISK_DATA,
+    [],
     'risk-trends'
   );
 }
@@ -80,7 +55,7 @@ export async function fetchRiskData(): Promise<RiskDataPoint[]> {
 export async function fetchRiskEvents(): Promise<RiskEvent[]> {
   return withFallback(
     async () => toCamelCase(await api.get<unknown[]>('/risk/events')),
-    MOCK_RISK_EVENTS,
+    [],
     'risk-events'
   );
 }
@@ -94,7 +69,7 @@ export async function fetchAiRecommendations(): Promise<string[]> {
       const data = await api.get<{ recommendations: string[] }>('/risk/ai-recommendations');
       return data.recommendations;
     },
-    MOCK_AI_RECOMMENDATIONS,
+    [],
     'risk-ai-recommendations'
   );
 }

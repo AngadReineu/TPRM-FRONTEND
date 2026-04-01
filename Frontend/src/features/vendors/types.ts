@@ -1,4 +1,4 @@
-import type { Stage, PiiFlow } from '@/types/shared';
+import type { Stage, PiiFlow } from '../../types/shared';
 
 export type AssessmentStatus = 'complete' | 'overdue' | 'pending';
 
