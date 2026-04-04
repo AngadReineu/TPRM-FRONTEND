@@ -23,11 +23,22 @@ AGENT_STATUS_COLORS = {
 }
 
 
-def build_dashboard(db: Session) -> DashboardSummary:
-    vendors   = db.query(Vendor).all()
+def build_dashboard(db: Session, org_id: str = None) -> DashboardSummary:
+    if org_id:
+        vendors   = db.query(Vendor).filter(Vendor.org_id == org_id).all()
+        vendor_ids = [v.id for v in vendors]
+        if vendor_ids:
+            risks = db.query(RiskEvent).filter(RiskEvent.supplier_id.in_(vendor_ids)).all()
+        else:
+            risks = []
+    else:
+        vendors   = db.query(Vendor).all()
+        risks     = db.query(RiskEvent).all()
+    
+    # Keeping agents and controls global for now if they aren't multi-tenant yet
+    # Or fetch strictly for org_id if they are (they aren't on model yet)
     agents    = db.query(Agent).all()
     controls  = db.query(Control).all()
-    risks     = db.query(RiskEvent).all()
 
     # ── KPI counts ────────────────────────────────────────
     total_vendors   = len(vendors)
@@ -43,15 +54,24 @@ def build_dashboard(db: Session) -> DashboardSummary:
     controls_active = sum(1 for c in controls if c.active)
     controls_total  = len(controls)
 
+    assessments_total = 0 if total_vendors == 0 else total_vendors
+    assessments_overdue = sum(1 for v in vendors if v.assessment == "overdue")
+
+    total_risk_alerts = len(risks)
+    critical_alerts = sum(1 for r in risks if r.severity and r.severity.lower() == "critical")
+
     # ── Risk trend (static shape — would be time-series in production) ──
-    risk_trend = [
-        RiskTrendPoint(month="Sep", overall=62, critical=8,  high=18),
-        RiskTrendPoint(month="Oct", overall=58, critical=6,  high=15),
-        RiskTrendPoint(month="Nov", overall=65, critical=10, high=20),
-        RiskTrendPoint(month="Dec", overall=54, critical=5,  high=12),
-        RiskTrendPoint(month="Jan", overall=70, critical=12, high=22),
-        RiskTrendPoint(month="Feb", overall=avg_score, critical=critical, high=high),
-    ]
+    if total_vendors == 0:
+        risk_trend = []
+    else:
+        risk_trend = [
+            RiskTrendPoint(month="Sep", overall=62, critical=8,  high=18),
+            RiskTrendPoint(month="Oct", overall=58, critical=6,  high=15),
+            RiskTrendPoint(month="Nov", overall=65, critical=10, high=20),
+            RiskTrendPoint(month="Dec", overall=54, critical=5,  high=12),
+            RiskTrendPoint(month="Jan", overall=70, critical=12, high=22),
+            RiskTrendPoint(month="Feb", overall=avg_score, critical=critical, high=high),
+        ]
 
     # ── Stage breakdown ────────────────────────────────────
     stage_map: dict[str, list[Vendor]] = {}
@@ -92,14 +112,19 @@ def build_dashboard(db: Session) -> DashboardSummary:
         "medium":   ("#F0F9FF", "#0EA5E9"),
     }
     recent_alerts = []
-    for r in sorted(risks, key=lambda x: x.date, reverse=True)[:5]:
-        sev = r.severity.lower()
+    
+    # Safely sort by date
+    def get_date(r):
+        return r.date or ""
+
+    for r in sorted(risks, key=get_date, reverse=True)[:5]:
+        sev = r.severity.lower() if r.severity else "medium"
         bg, _ = severity_styles.get(sev, ("#F8FAFC", "#64748B"))
         recent_alerts.append(RiskAlert(
             type=r.category or "Risk",
-            supplier=r.supplier_name,
+            supplier=r.supplier_name or "Unknown",
             system="TPRM System",
-            severity=r.severity,
+            severity=r.severity or "Medium",
             severity_bg=bg,
         ))
 
@@ -114,6 +139,10 @@ def build_dashboard(db: Session) -> DashboardSummary:
         low_count=low,
         controls_active=controls_active,
         controls_total=controls_total,
+        assessments_total=assessments_total,
+        assessments_overdue=assessments_overdue,
+        total_risk_alerts=total_risk_alerts,
+        critical_alerts=critical_alerts,
         risk_trend=risk_trend,
         stage_breakdown=stage_breakdown,
         agent_activity=agent_activity,

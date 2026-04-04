@@ -67,7 +67,7 @@ export function LoginPage() {
               <line x1="2" y1="13" x2="6" y2="13" stroke="#0EA5E9" strokeWidth="1.5"/>
               <line x1="20" y1="13" x2="24" y2="13" stroke="#0EA5E9" strokeWidth="1.5"/>
             </svg>
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">Kyūdo</span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">TPRM</span>
           </div>
           <p className="text-slate-500">Third-Party Risk Management</p>
         </div>
@@ -136,18 +136,9 @@ export function LoginPage() {
           <p className="mt-6 text-center text-sm text-slate-500">
             Don't have an account?{' '}
             <Link to="/register" className="text-sky-500 hover:underline font-medium">
-              Create one
+              Register →
             </Link>
           </p>
-        </div>
-
-        {/* Demo credentials */}
-        <div className="mt-6 p-4 bg-slate-100 rounded-xl border border-slate-200">
-          <p className="text-xs font-medium text-slate-600 mb-2">Demo credentials:</p>
-          <div className="text-xs text-slate-500 space-y-1">
-            <div><span className="font-mono">priya@abc.co</span> / <span className="font-mono">password123</span></div>
-            <div><span className="font-mono">raj@abc.co</span> / <span className="font-mono">password123</span></div>
-          </div>
         </div>
       </div>
     </div>

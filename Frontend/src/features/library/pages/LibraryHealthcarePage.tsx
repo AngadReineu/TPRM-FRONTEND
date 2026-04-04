@@ -633,14 +633,9 @@ export function LibraryHealthcarePage() {
         score: sup.score || 0,
         risk: sup.risk || 'Low',
         riskColor: sup.risk === 'High' ? '#F59E0B' : sup.risk === 'Medium' ? '#64748B' : sup.risk === 'Low' ? '#10B981' : '#EF4444',
-        assessment: sup.state === 'active' ? 'complete' : sup.state === 'complete_unconfigured' ? 'complete' : 'pending',
+        assessment: (sup.state === 'active' ? 'complete' : sup.state === 'complete_unconfigured' ? 'complete' : 'pending') as any,
         pii: { configured: false },
-        piiFlow: null,
-        contractEnd: null,
         contractWarning: false,
-        agentId: null,
-        internalSpoc: null,
-        externalSpoc: null,
         lastActivity: 'just now',
       };
 

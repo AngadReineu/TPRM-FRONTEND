@@ -48,6 +48,10 @@ class DashboardSummary(BaseModel):
     low_count: int
     controls_active: int
     controls_total: int
+    assessments_total: int
+    assessments_overdue: int
+    total_risk_alerts: int
+    critical_alerts: int
     risk_trend: List[RiskTrendPoint]
     stage_breakdown: List[StageDataItem]
     agent_activity: List[AgentRow]

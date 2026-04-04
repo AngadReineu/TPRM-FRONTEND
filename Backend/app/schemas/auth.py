@@ -24,7 +24,18 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    org_id: Optional[str] = None
+    org_name: Optional[str] = None
+    industry: Optional[str] = None
     avatar: Optional[str] = None
     status: str
 
     model_config = {"from_attributes": True}
+
+
+class RegisterPayload(BaseModel):
+    org_name: str
+    industry: str
+    name: str
+    email: str
+    password: str

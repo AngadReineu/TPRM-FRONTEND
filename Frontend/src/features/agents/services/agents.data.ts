@@ -537,7 +537,7 @@ export async function getAgent(id: string): Promise<Agent | undefined> {
 export async function getAgentDefinition(id: string): Promise<AgentDefinition> {
   return withFallback(
     async () => toCamelCase(await api.get<unknown>(`/agents/${id}/definition`)),
-    AGENTS[id] || AGENTS['a1'],
+    {} as AgentDefinition,
     'agent-definition'
   );
 }
@@ -548,13 +548,9 @@ export async function getAgentDefinition(id: string): Promise<AgentDefinition> {
  * @param view - 'list' or 'detail' view type
  */
 export async function getAgentTasks(agentId: string, view: 'list' | 'detail' = 'list'): Promise<AgentTask[]> {
-  const mockData = view === 'detail'
-    ? (AGENT_TASKS_DETAIL[agentId] || [])
-    : (AGENT_TASKS_LIST[agentId] || []);
-
   return withFallback(
     async () => toCamelCase(await api.get<unknown[]>(`/agents/${agentId}/tasks?view=${view}`)),
-    mockData,
+    [],
     'agent-tasks'
   );
 }
@@ -565,13 +561,9 @@ export async function getAgentTasks(agentId: string, view: 'list' | 'detail' = '
  * @param view - 'list' or 'detail' view type
  */
 export async function getAgentTimeline(agentId: string, view: 'list' | 'detail' = 'list'): Promise<TimelineEntry[]> {
-  const mockData = view === 'detail'
-    ? (AGENT_TIMELINE_DETAIL[agentId] || [])
-    : (AGENT_TIMELINE_LIST[agentId] || []);
-
   return withFallback(
     async () => toCamelCase(await api.get<unknown[]>(`/agents/${agentId}/timeline?view=${view}`)),
-    mockData,
+    [],
     'agent-timeline'
   );
 }
@@ -582,13 +574,9 @@ export async function getAgentTimeline(agentId: string, view: 'list' | 'detail' 
  * @param view - 'list' or 'detail' view type
  */
 export async function getAgentLogs(agentId: string, view: 'list' | 'detail' = 'list'): Promise<LogEntry[]> {
-  const mockData = view === 'detail'
-    ? buildInitialLogsDetail(agentId)
-    : buildInitialLogsList(agentId);
-
   return withFallback(
     async () => toCamelCase(await api.get<unknown[]>(`/agents/${agentId}/logs?view=${view}`)),
-    mockData,
+    [],
     'agent-logs'
   );
 }

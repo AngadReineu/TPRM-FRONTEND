@@ -15,7 +15,7 @@ import type { Stage } from '../../../types/shared';
 import {
   STATUS_CLR, STATUS_LABEL, STAGE_CLR, AVATAR_GRADIENTS,
   STAGES, LOG_STYLE,
-  getMockAgents, openAlerts,
+  openAlerts,
   getAgentTasksList, getAgentTimelineList,
   getInitialLogsList, getStreamQueueList,
   getAvatarUrl,
@@ -314,7 +314,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
       const agent = await createAgent({
         name: name.trim(),
         initials,
-        status: 'active',
+        status: 'idle',
         stage: firstStage,
         controls: selectedControlNames.length || 1, // Store the count of controls accurately
         suppliers: supplierIds.length,
@@ -766,7 +766,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
       })
       .catch((err) => {
         console.error('Failed to fetch agents:', err);
-      if (mounted) {setAgents(getMockAgents()); setIsLoading(false); }
+        if (mounted) { setAgents([]); setIsLoading(false); }
       });
 
     return () => {mounted = false; };
@@ -976,14 +976,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </div>
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             {(() => {
-              const MOCK_ACTIVITY = [
-                { agent_name: 'Agent Aria',  agent_initials: 'AA', agent_color: '#0EA5E9', message: 'checked MFA compliance on XYZ Corporation',         log_type: 'pass',    created_at: null },
-                { agent_name: 'Agent Blake', agent_initials: 'AB', agent_color: '#EF4444', message: 'raised alert: Call Center Ltd missing data',          log_type: 'warning', created_at: null },
-                { agent_name: 'Agent Casey', agent_initials: 'AC', agent_color: '#F59E0B', message: 'started backup verification check',                   log_type: 'fetch',   created_at: null },
-                { agent_name: 'Agent Aria',  agent_initials: 'AA', agent_color: '#0EA5E9', message: 'document expiry warning: ISO 27001 cert expires in 22 days', log_type: 'warn', created_at: null },
-                { agent_name: 'Agent Blake', agent_initials: 'AB', agent_color: '#EF4444', message: 'completed access review policy evaluation',             log_type: 'success', created_at: null },
-              ];
-              const rows = recentActivity.length > 0 ? recentActivity : MOCK_ACTIVITY;
+              const rows = recentActivity || [];
 
               const getIcon = (logType: string) => {
                 const t = (logType || '').toLowerCase();

@@ -1,7 +1,34 @@
 import { useState, useRef, useEffect } from 'react';
-import { RotateCcw, X, Network, AlertTriangle, Building2, Briefcase, Database, Eye, EyeOff, Smartphone, Cpu, CheckCircle2 } from 'lucide-react';
+import { RotateCcw, X, Network, AlertTriangle, Building2, Briefcase, Database, Eye, EyeOff, Smartphone, Cpu, CheckCircle2, Check, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuthStore } from '../../../stores/authStore';
 import { getGraphData, createDivision, updateDivision, createSupplier, createSystem, deleteDivision, deleteSupplier, deleteSystem } from '../services/library.data';
+
+/* ── Validation helpers ─────────────────────────────────── */
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidMobile = (mobile: string) => /^[6-9]\d{9}$/.test(mobile.replace(/\s/g, ''));
+const isValidGST = (gst: string) => 
+  gst === '' || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst.toUpperCase());
+const isValidPAN = (pan: string) => 
+  pan === '' || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan.toUpperCase());
+
+const fieldClass = (isValid: boolean, value: string) =>
+  `w-full box-border border rounded-lg text-[13px] py-[9px] px-3 outline-none text-slate-700 ${
+    value && !isValid 
+      ? 'border-red-300 focus:ring-red-200' 
+      : value && isValid 
+      ? 'border-emerald-300 focus:ring-emerald-200'
+      : 'border-slate-200 focus:ring-sky-200'
+  }`;
+
+/* ── Contact types ─────────────────────────────────────── */
+interface LibContact {
+  id: string;
+  label: string;
+  email: string;
+  isDefault: boolean;
+}
+
 /* ─── Types ─────────────────────────────────────────────── */
 type Stage = 'Acquisition' | 'Retention' | 'Upgradation' | 'Offboarding';
 type PiiVolume = 'low' | 'moderate' | 'high';
@@ -21,8 +48,9 @@ interface Supplier {
   frequency?: string;
   lifecycles?: Stage[];
   stakeholders?: {
-    businessOwner?: string; financeContact?: string; projectManager?: string; escalationContact?: string;
-    accountManager?: string; supplierFinance?: string; supplierEscalation?: string;
+    internal?: { label: string; email: string }[];
+    supplier?: { label: string; email: string }[];
+    [key: string]: any;
   };
 }
 interface SystemNode {
@@ -86,108 +114,7 @@ const piiStrokeW = (vol: PiiVolume): number =>
 const supOuterR = (vol: PiiVolume): number =>
   vol === 'low' ? 22 : vol === 'moderate' ? 26 : 32;
 
-/* ─── Mock Data ─────────────────────────────────────────── */
-const INIT_ORG = { x: 580, y: 380 };
 
-const INIT_DIVS: Division[] = [
-  { id: 'd1', name: 'Marketing Dept', x: 400, y: 200 },
-  { id: 'd2', name: 'Technical Dept', x: 350, y: 500 },
-  { id: 'd3', name: 'Operations Dept', x: 760, y: 480 },
-  { id: 'ld1', name: 'Growth & Leads', x: 200, y: 130, lifecycleStage: 'Acquisition' },
-  { id: 'ld3', name: 'Customer Success', x: 600, y: 130, lifecycleStage: 'Retention' },
-  { id: 'ld5', name: 'Product Upgrades', x: 1000, y: 130, lifecycleStage: 'Upgradation' },
-  { id: 'ld7', name: 'Churn Prevention', x: 1400, y: 130, lifecycleStage: 'Offboarding' },
-];
-
-const INIT_SUPS: Supplier[] = [
-  { id: 's1', divisionId: 'd1', x: 220, y: 120, name: 'XYZ Email Mktg', stage: 'Acquisition', riskScore: 78, piiVolume: 'moderate', email: 'xyz@email.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'share', piiTypes: ['Aadhar', 'Phone', 'Email'], hasTruthGap: false, declaredPii: ['Aadhar', 'Phone', 'Email'], detectedPii: ['Aadhar', 'Phone', 'Email'], internalSpoc: 'priya@abc.co', externalSpoc: 'john@xyz.com', frequency: 'Daily', contractEnd: '2026-12-31', lifecycles: ['Acquisition', 'Retention'], stakeholders: { businessOwner: 'priya@abc.co', financeContact: 'finance@abc.co', accountManager: 'john@xyz.com', supplierFinance: 'billing@xyz.com' } },
-  { id: 's2', divisionId: 'd1', x: 380, y: 80, name: 'Field Agent Co.', stage: 'Acquisition', riskScore: null, piiVolume: 'low', email: 'field@agent.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'ingest', piiTypes: ['Email'], hasTruthGap: false, declaredPii: ['Email'], detectedPii: ['Email'], internalSpoc: 'priya@abc.co', externalSpoc: 'leads@field.com', frequency: 'Weekly', contractEnd: '2026-06-30', lifecycles: ['Acquisition'], stakeholders: { businessOwner: 'priya@abc.co', accountManager: 'leads@field.com' } },
-  { id: 's3', divisionId: 'd1', x: 200, y: 280, name: 'Call Center Ltd', stage: 'Retention', riskScore: 22, piiVolume: 'high', email: 'cc@ltd.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'both', piiTypes: ['Aadhar', 'Phone'], hasTruthGap: true, declaredPii: ['Phone'], detectedPii: ['Aadhar', 'Phone', 'Location'], internalSpoc: 'raj@abc.co', externalSpoc: 'ops@ccltd.com', frequency: 'Hourly', contractEnd: '2025-12-31', lifecycles: ['Retention', 'Upgradation'], stakeholders: { businessOwner: 'raj@abc.co', escalationContact: 'ciso@abc.co', accountManager: 'ops@ccltd.com', supplierEscalation: 'escalate@ccltd.com' } },
-  { id: 's4', divisionId: 'd2', x: 160, y: 460, name: 'CloudSec Inc.', stage: 'Upgradation', riskScore: 82, piiVolume: 'low', email: 'cloud@sec.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'share', piiTypes: ['Credentials'], hasTruthGap: false, declaredPii: ['Credentials'], detectedPii: ['Credentials'], internalSpoc: 'anita@abc.co', externalSpoc: 'cto@cloudsec.io', frequency: 'Daily', contractEnd: '2027-03-31', lifecycles: ['Upgradation'], stakeholders: { businessOwner: 'anita@abc.co', projectManager: 'pm@abc.co', accountManager: 'cto@cloudsec.io' } },
-  { id: 's5', divisionId: 'd2', x: 200, y: 620, name: 'DataVault Co.', stage: 'Retention', riskScore: 35, piiVolume: 'moderate', email: 'data@vault.co', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'both', piiTypes: ['Financial', 'PAN'], hasTruthGap: true, declaredPii: ['Financial'], detectedPii: ['Financial', 'PAN', 'Aadhar'], internalSpoc: 'anita@abc.co', externalSpoc: 'dpo@datavault.co', frequency: 'Hourly', contractEnd: '2026-09-30', lifecycles: ['Retention', 'Offboarding'], stakeholders: { businessOwner: 'anita@abc.co', escalationContact: 'dpo@abc.co', accountManager: 'dpo@datavault.co', supplierEscalation: 'security@datavault.co' } },
-  { id: 's6', divisionId: 'd3', x: 660, y: 640, name: 'LogiTrack Ltd', stage: 'Offboarding', riskScore: null, piiVolume: 'low', email: 'lt@email.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'ingest', piiTypes: ['Location'], hasTruthGap: false, declaredPii: ['Location'], detectedPii: ['Location'], frequency: 'Weekly', contractEnd: '2025-06-30', lifecycles: ['Offboarding'] },
-  { id: 's7', divisionId: 'd3', x: 880, y: 560, name: 'HR Systems Co.', stage: 'Acquisition', riskScore: 88, piiVolume: 'moderate', email: 'hr@systems.co', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'share', piiTypes: ['Name', 'Email', 'DOB'], hasTruthGap: false, declaredPii: ['Name', 'Email', 'DOB'], detectedPii: ['Name', 'Email', 'DOB'], frequency: 'Daily', contractEnd: '2026-12-31', lifecycles: ['Acquisition', 'Retention'] },
-  { id: 'ls1', divisionId: 'ld1', x: 90, y: 230, name: 'AdReach Pro', stage: 'Acquisition', riskScore: 72, piiVolume: 'moderate', email: 'ads@adreach.io', contact: 'Sam', phone: '+91 98100 11111', website: 'adreach.io', gst: '', pan: '', piiFlow: 'share', piiTypes: ['Name', 'Email', 'Phone'], hasTruthGap: false, declaredPii: ['Name', 'Email', 'Phone'], detectedPii: ['Name', 'Email', 'Phone'], internalSpoc: 'priya@abc.co', externalSpoc: 'sam@adreach.io', frequency: 'Daily', contractEnd: '2026-12-31', lifecycles: ['Acquisition'], stakeholders: { businessOwner: 'priya@abc.co', accountManager: 'sam@adreach.io' } },
-  { id: 'ls2', divisionId: 'ld1', x: 330, y: 230, name: 'LeadGen Solutions', stage: 'Acquisition', riskScore: null, piiVolume: 'low', email: 'info@leadgen.co', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'ingest', piiTypes: ['Email'], hasTruthGap: false, declaredPii: ['Email'], detectedPii: ['Email'], internalSpoc: 'priya@abc.co', externalSpoc: 'leads@leadgen.co', frequency: 'Weekly', contractEnd: '2026-09-30', lifecycles: ['Acquisition'] },
-  { id: 'ls5', divisionId: 'ld3', x: 500, y: 230, name: 'NPS Track Co.', stage: 'Retention', riskScore: 68, piiVolume: 'moderate', email: 'nps@track.io', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'both', piiTypes: ['Phone', 'Email'], hasTruthGap: false, declaredPii: ['Phone', 'Email'], detectedPii: ['Phone', 'Email'], internalSpoc: 'raj@abc.co', frequency: 'Daily', contractEnd: '2026-10-31', lifecycles: ['Retention'] },
-  { id: 'ls6', divisionId: 'ld3', x: 730, y: 230, name: 'Call Center Ltd', stage: 'Retention', riskScore: 22, piiVolume: 'high', email: 'cc@ltd.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'both', piiTypes: ['Aadhar', 'Phone'], hasTruthGap: true, declaredPii: ['Phone'], detectedPii: ['Aadhar', 'Phone', 'Location'], internalSpoc: 'raj@abc.co', externalSpoc: 'ops@ccltd.com', frequency: 'Hourly', contractEnd: '2025-12-31', lifecycles: ['Retention'], stakeholders: { businessOwner: 'raj@abc.co', escalationContact: 'ciso@abc.co', accountManager: 'ops@ccltd.com' } },
-  { id: 'ls9', divisionId: 'ld5', x: 900, y: 230, name: 'UpSell AI', stage: 'Upgradation', riskScore: 76, piiVolume: 'moderate', email: 'api@upsellai.com', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'share', piiTypes: ['Financial', 'PAN'], hasTruthGap: false, declaredPii: ['Financial', 'PAN'], detectedPii: ['Financial', 'PAN'], internalSpoc: 'anita@abc.co', frequency: 'Daily', contractEnd: '2026-12-31', lifecycles: ['Upgradation'] },
-  { id: 'ls10', divisionId: 'ld5', x: 1130, y: 230, name: 'Policy Xpander', stage: 'Upgradation', riskScore: 60, piiVolume: 'low', email: 'px@policyxp.in', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'ingest', piiTypes: ['Name', 'DOB'], hasTruthGap: false, declaredPii: ['Name', 'DOB'], detectedPii: ['Name', 'DOB'], internalSpoc: 'anita@abc.co', frequency: 'Weekly', contractEnd: '2027-06-30', lifecycles: ['Upgradation'] },
-  { id: 'ls13', divisionId: 'ld7', x: 1300, y: 230, name: 'Churn Analytics', stage: 'Offboarding', riskScore: 50, piiVolume: 'moderate', email: 'ops@churnai.io', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'ingest', piiTypes: ['Phone', 'Email'], hasTruthGap: false, declaredPii: ['Phone', 'Email'], detectedPii: ['Phone', 'Email'], internalSpoc: 'kiran@abc.co', frequency: 'Daily', contractEnd: '2026-07-31', lifecycles: ['Offboarding'] },
-  { id: 'ls14', divisionId: 'ld7', x: 1530, y: 230, name: 'WinBack Mktg', stage: 'Offboarding', riskScore: 40, piiVolume: 'low', email: 'wb@winback.in', contact: '', phone: '', website: '', gst: '', pan: '', piiFlow: 'share', piiTypes: ['Email'], hasTruthGap: false, declaredPii: ['Email'], detectedPii: ['Email'], internalSpoc: 'kiran@abc.co', frequency: 'Weekly', contractEnd: '2025-12-31', lifecycles: ['Offboarding'] },
-];
-
-const INIT_SYSTEMS: SystemNode[] = [
-  {
-    id: 'sys1', divisionId: 'd1', x: 480, y: 100, name: 'Salesforce CRM', type: 'crm',
-    dataSource: 'AWS S3 Bucket (us-east-1/crm-prod)',
-    piiTypes: ['Name', 'Email', 'Phone', 'DOB'],
-    vulnScore: 82,
-    stage: 'Acquisition',
-    internalSpoc: 'priya@abc.co',
-    authorizedPii: ['Name', 'Phone', 'Email', 'DOB'],
-    hasStageDiscrepancy: true,
-    discrepancyFields: ['Bank Balance', 'Aadhar'],
-    linkedSupplierId: 's2',
-    agentReasoning: {
-      timestamp: '09:14 AM',
-      action: 'Stage PII Audit',
-      trigger: 'Salesforce CRM · Acquisition Step',
-      reasoning: 'Detected "Bank Balance" and "Aadhar" fields being written to Salesforce CRM (Acquisition stage). These fields are not authorized at this step — they belong to Retention/Upgradation workflows. Probable cause: employee error or unauthorized data pre-fill. Flagging as Stage Discrepancy.',
-      confidence: 94,
-      outcome: 'alert',
-    },
-  },
-  {
-    id: 'sys2', divisionId: 'd2', x: 120, y: 560, name: 'AWS Infra', type: 'infra',
-    dataSource: 'SQL DB (prod-db.internal:5432)',
-    piiTypes: ['Credentials', 'Financial', 'PAN'],
-    vulnScore: 61,
-    stage: 'Upgradation',
-    internalSpoc: 'anita@abc.co',
-    authorizedPii: ['Credentials', 'Financial', 'PAN'],
-    hasStageDiscrepancy: false,
-    linkedSupplierId: 's4',
-  },
-  {
-    id: 'lsys1', divisionId: 'ld1', x: 215, y: 320,
-    name: 'Salesforce CRM', type: 'crm',
-    dataSource: 'AWS S3 (us-east-1/crm-prod)',
-    piiTypes: ['Name', 'Email', 'Phone', 'DOB'],
-    vulnScore: 82, stage: 'Acquisition', internalSpoc: 'priya@abc.co',
-    authorizedPii: ['Name', 'Phone', 'Email'],
-    hasStageDiscrepancy: true, discrepancyFields: ['Bank Balance', 'Aadhar'],
-    linkedSupplierId: 'ls2',
-    agentReasoning: { timestamp: '09:14 AM', action: 'Stage PII Audit', trigger: 'Salesforce CRM · Acquisition Step', reasoning: 'Detected "Bank Balance" and "Aadhar" fields being written to Salesforce CRM (Acquisition stage). These fields are not authorized at this step — they belong to Retention/Upgradation workflows.', confidence: 94, outcome: 'alert' },
-  },
-  {
-    id: 'lsys3', divisionId: 'ld3', x: 615, y: 320,
-    name: 'Zendesk CRM', type: 'crm',
-    dataSource: 'AWS RDS (ap-south-1/zendesk-prod)',
-    piiTypes: ['Name', 'Email', 'Phone'],
-    vulnScore: 79, stage: 'Retention', internalSpoc: 'raj@abc.co',
-    authorizedPii: ['Name', 'Email', 'Phone'],
-    hasStageDiscrepancy: false, linkedSupplierId: 'ls5',
-  },
-  {
-    id: 'lsys5', divisionId: 'ld5', x: 1015, y: 320,
-    name: 'Policy Engine', type: 'infra',
-    dataSource: 'AWS S3 (ap-south-1/policy-engine)',
-    piiTypes: ['Financial', 'PAN', 'DOB'],
-    vulnScore: 65, stage: 'Upgradation', internalSpoc: 'anita@abc.co',
-    authorizedPii: ['Financial', 'PAN', 'DOB'],
-    hasStageDiscrepancy: false, linkedSupplierId: 'ls9',
-  },
-  {
-    id: 'lsys7', divisionId: 'ld7', x: 1415, y: 320,
-    name: 'Churn Dashboard', type: 'crm',
-    dataSource: 'GCP BigQuery (project/churn-metrics)',
-    piiTypes: ['Phone', 'Email'],
-    vulnScore: 70, stage: 'Offboarding', internalSpoc: 'kiran@abc.co',
-    authorizedPii: ['Phone', 'Email'],
-    hasStageDiscrepancy: false, linkedSupplierId: 'ls13',
-  },
-];
 
 /* ─── Supplier dual-circle SVG ──────────────────────────── */
 function SupCircle({ riskScore, piiVolume, size }: { riskScore: number | null; piiVolume: PiiVolume; size: number }) {
@@ -204,6 +131,7 @@ function SupCircle({ riskScore, piiVolume, size }: { riskScore: number | null; p
 
 /* ═══════════════════════════════════════════════════════ */
 export function LibraryPage() {
+  const user = useAuthStore((state) => state.user);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragMovedRef = useRef(false);
   const [containerWidth, setContainerWidth] = useState(1200);
@@ -211,10 +139,10 @@ export function LibraryPage() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [orgPos, setOrgPos] = useState(INIT_ORG);
-  const [divisions, setDivisions] = useState<Division[]>(INIT_DIVS);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(INIT_SUPS);
-  const [systems, setSystems] = useState<SystemNode[]>(INIT_SYSTEMS);
+  const [orgPos, setOrgPos] = useState({ x: 580, y: 380 });
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [systems, setSystems] = useState<SystemNode[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [xrayMode, setXrayMode] = useState(false);
@@ -225,6 +153,41 @@ export function LibraryPage() {
   const [divName, setDivName] = useState('');
   const [supForm, setSupForm] = useState({ name: '', email: '', contact: '', phone: '', website: '', gst: '', pan: '', stage: '' as Stage | '', contractStart: '', contractEnd: '', frequency: 'Daily', lifecycles: [] as Stage[], businessOwner: '', financeContact: '', projectManager: '', escalationContact: '', accountManager: '', supplierFinance: '', supplierEscalation: '' });
   const [sysForm, setSysForm] = useState({ name: '', type: 'crm' as SystemNode['type'], stage: '' as Stage | '', dataSource: '', authorizedPii: [] as string[], vulnScore: 75, linkedSupplierId: '' });
+  
+  // Contact management for stakeholder matrix
+  const [libInternalContacts, setLibInternalContacts] = useState<LibContact[]>([
+    { id: 'default-internal', label: 'Business Owner', email: '', isDefault: true }
+  ]);
+  const [libSupplierContacts, setLibSupplierContacts] = useState<LibContact[]>([
+    { id: 'default-supplier', label: 'Account Manager', email: '', isDefault: true }
+  ]);
+
+  function addLibContact(side: 'internal' | 'supplier') {
+    const newContact: LibContact = { id: crypto.randomUUID(), label: '', email: '', isDefault: false };
+    if (side === 'internal') {
+      setLibInternalContacts(prev => [...prev, newContact]);
+    } else {
+      setLibSupplierContacts(prev => [...prev, newContact]);
+    }
+  }
+
+  function removeLibContact(side: 'internal' | 'supplier', id: string) {
+    if (side === 'internal') {
+      setLibInternalContacts(prev => prev.filter(c => c.id !== id));
+    } else {
+      setLibSupplierContacts(prev => prev.filter(c => c.id !== id));
+    }
+  }
+
+  function updateLibContact(side: 'internal' | 'supplier', id: string, field: 'label' | 'email', value: string) {
+    const setter = side === 'internal' ? setLibInternalContacts : setLibSupplierContacts;
+    setter(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+  }
+
+  function resetLibContacts() {
+    setLibInternalContacts([{ id: 'default-internal', label: 'Business Owner', email: '', isDefault: true }]);
+    setLibSupplierContacts([{ id: 'default-supplier', label: 'Account Manager', email: '', isDefault: true }]);
+  }
 
   // Load data from backend on mount
   useEffect(() => {
@@ -298,7 +261,7 @@ export function LibraryPage() {
     if (!el) return;
     const r = el.getBoundingClientRect();
     setContainerWidth(r.width);
-    setPan({ x: r.width / 2 - INIT_ORG.x, y: r.height / 2 - INIT_ORG.y });
+    setPan({ x: r.width / 2 - 580, y: r.height / 2 - 380 });
     const ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width;
       if (w) setContainerWidth(w);
@@ -429,7 +392,7 @@ export function LibraryPage() {
       setLifecycleView(true);
     } else {
       setZoom(1);
-      if (r) setPan({ x: r.width / 2 - INIT_ORG.x, y: r.height / 2 - INIT_ORG.y });
+      if (r) setPan({ x: r.width / 2 - 580, y: r.height / 2 - 380 });
       setLifecycleView(false);
     }
   };
@@ -458,7 +421,21 @@ export function LibraryPage() {
   };
 
   const addSupplier = async () => {
-    if (!supForm.name || !supForm.email || !supForm.stage) return;
+    // Validate required fields
+    const isFormValid = 
+      supForm.name.trim() !== '' &&
+      isValidEmail(supForm.email) &&
+      supForm.stage !== '' &&
+      (!supForm.phone || isValidMobile(supForm.phone)) &&
+      (!supForm.gst || isValidGST(supForm.gst)) &&
+      (!supForm.pan || isValidPAN(supForm.pan)) &&
+      libInternalContacts[0].email !== '' && isValidEmail(libInternalContacts[0].email) &&
+      libSupplierContacts[0].email !== '' && isValidEmail(libSupplierContacts[0].email);
+
+    if (!isFormValid) {
+      toast.error('Please fill in all required fields correctly');
+      return;
+    }
     const divisionId = modal?.type === 'addSup' ? modal.divisionId : '';
     const div = divisions.find(d => d.id === divisionId);
     if (!div) return;
@@ -477,11 +454,11 @@ export function LibraryPage() {
         stage: supForm.stage as Stage, piiVolume: 'low', piiFlow: 'share', piiTypes: [],
         contractStart: supForm.contractStart || undefined, contractEnd: supForm.contractEnd || undefined,
         frequency: supForm.frequency || undefined, lifecycles: lcs,
+        internalSpoc: libInternalContacts[0]?.email || undefined,
+        externalSpoc: libSupplierContacts[0]?.email || undefined,
         stakeholders: {
-          businessOwner: supForm.businessOwner || undefined, financeContact: supForm.financeContact || undefined,
-          projectManager: supForm.projectManager || undefined, escalationContact: supForm.escalationContact || undefined,
-          accountManager: supForm.accountManager || undefined, supplierFinance: supForm.supplierFinance || undefined,
-          supplierEscalation: supForm.supplierEscalation || undefined
+          internal: libInternalContacts.filter(c => c.email).map(c => ({ label: c.label, email: c.email })),
+          supplier: libSupplierContacts.filter(c => c.email).map(c => ({ label: c.label, email: c.email }))
         }
       });
       setSuppliers(ss => [...ss, newSup]);
@@ -491,6 +468,7 @@ export function LibraryPage() {
       toast.error('Failed to add supplier');
     }
     setModal(null); setSupForm({ name: '', email: '', contact: '', phone: '', website: '', gst: '', pan: '', stage: '', contractStart: '', contractEnd: '', frequency: 'Daily', lifecycles: [], businessOwner: '', financeContact: '', projectManager: '', escalationContact: '', accountManager: '', supplierFinance: '', supplierEscalation: '' });
+    resetLibContacts();
   };
 
   const addSystem = async () => {
@@ -714,7 +692,7 @@ export function LibraryPage() {
                 <Building2 size={26} color="#fff" strokeWidth={1.8} />
               </div>
               <div className="absolute top-full left-1/2 -translate-x-1/2 text-center mt-[7px] pointer-events-none whitespace-nowrap">
-                <div className="text-xs font-bold text-slate-900">ABC Insurance Co.</div>
+                <div className="text-xs font-bold text-slate-900">{user?.org_name || 'Organization'}</div>
                 <div className="text-[10px] text-slate-400">Organization</div>
               </div>
               {hoveredId === 'org' && <div title="Add Division" onClick={e => { e.stopPropagation(); setModal({ type: 'addDiv' }); }} className="absolute -top-3 -right-3 w-[22px] h-[22px] rounded-full bg-emerald-500 flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(16,185,129,0.45)] z-20 text-white text-[17px] leading-none">+</div>}
@@ -893,17 +871,31 @@ export function LibraryPage() {
           )}
 
           {/* ── ADD SUPPLIER ──────────────────────── */}
-          {modal.type === 'addSup' && (
-            <div onClick={e => e.stopPropagation()} className="relative w-[480px] max-h-[85vh] overflow-y-auto bg-white rounded-2xl p-6 shadow-[0_24px_64px_rgba(0,0,0,0.16)] animate-[scaleIn_0.18s_ease]">
-              <button onClick={() => setModal(null)} className="absolute top-4 right-4 bg-transparent border-none cursor-pointer text-slate-400"><X size={18} /></button>
+          {modal.type === 'addSup' && (() => {
+            const isFormValid = 
+              supForm.name.trim() !== '' &&
+              isValidEmail(supForm.email) &&
+              supForm.stage !== '' &&
+              (!supForm.phone || isValidMobile(supForm.phone)) &&
+              (!supForm.gst || isValidGST(supForm.gst)) &&
+              (!supForm.pan || isValidPAN(supForm.pan)) &&
+              libInternalContacts[0].email !== '' && isValidEmail(libInternalContacts[0].email) &&
+              libSupplierContacts[0].email !== '' && isValidEmail(libSupplierContacts[0].email);
+            return (
+            <div onClick={e => e.stopPropagation()} className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl p-6 shadow-[0_24px_64px_rgba(0,0,0,0.16)] animate-[scaleIn_0.18s_ease]">
+              <button onClick={() => { setModal(null); resetLibContacts(); }} className="absolute top-4 right-4 bg-transparent border-none cursor-pointer text-slate-400"><X size={18} /></button>
               <div className="text-lg font-bold text-[#0F172A] mb-2.5">Add Supplier</div>
               {addSupDiv && <div className="mb-3"><span className="bg-indigo-50 text-violet-500 text-xs font-semibold py-[3px] px-2.5 rounded-[6px]">{addSupDiv.name}</span></div>}
+              
+              {/* Supplier Stage */}
               <div className="mb-4">
-                <label className="block text-[13px] font-bold text-[#0F172A] mb-2">Supplier Stage *</label>
+                <label className="block text-[13px] font-bold text-[#0F172A] mb-2">Supplier Stage <span className="text-red-500">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   {STAGES.map(s => { const sel = supForm.stage === s; const [bg, clr] = STAGE_CLR[s]; return <button key={s} onClick={() => setSupForm(p => ({ ...p, stage: p.stage === s ? '' : s }))} className="py-2.5 px-3.5 rounded-[10px] text-[13px] cursor-pointer transition-all duration-150 text-center" style={{ fontWeight: sel ? 700 : 500, backgroundColor: sel ? bg : '#F8FAFC', color: sel ? clr : '#64748B', border: `${sel ? 2 : 1}px solid ${sel ? clr : '#E2E8F0'}` }}>{s}</button>; })}
                 </div>
               </div>
+              
+              {/* Lifecycle Mapping */}
               <div className="bg-slate-50 border border-slate-200 rounded-[10px] px-3.5 py-3 mb-4">
                 <div className="flex items-center gap-1.5 mb-2.5">
                   <div className="w-[3px] h-[13px] rounded-[2px] bg-violet-500" />
@@ -913,15 +905,82 @@ export function LibraryPage() {
                   {STAGES.map(s => { const checked = supForm.lifecycles.includes(s); const [bg, clr] = STAGE_CLR[s]; const dotColors: Record<Stage, string> = { Acquisition: '#0EA5E9', Retention: '#10B981', Upgradation: '#F59E0B', Offboarding: '#64748B' }; return <label key={s} className="flex items-center gap-2 py-2 px-2.5 rounded-lg cursor-pointer" style={{ border: `1px solid ${checked ? clr : '#E2E8F0'}`, backgroundColor: checked ? bg : '#fff' }}><div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ border: `2px solid ${checked ? clr : '#CBD5E1'}`, backgroundColor: checked ? clr : '#fff' }} onClick={() => setSupForm(p => { const lcs = p.lifecycles.includes(s) ? p.lifecycles.filter(l => l !== s) : [...p.lifecycles, s]; return { ...p, lifecycles: lcs }; })}>{checked && <CheckCircle2 size={10} color="#fff" strokeWidth={3} />}</div><div className="flex items-center gap-[5px]"><div className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: dotColors[s] }} /><span className="text-xs" style={{ fontWeight: checked ? 600 : 400, color: checked ? clr : '#64748B' }}>Customer {s}</span></div></label>; })}
                 </div>
               </div>
-              {[{ label: 'Supplier Name *', key: 'name', ph: 'e.g., XYZ Corporation' }, { label: 'Email *', key: 'email', ph: 'contact@company.com' }, { label: 'Contact Person', key: 'contact', ph: 'Full name' }, { label: 'Phone', key: 'phone', ph: '+91 98765 43210' }, { label: 'Website', key: 'website', ph: 'https://example.com' }].map(f => (
-                <div key={f.key} className="mb-3">
-                  <label className="block text-[13px] font-semibold text-slate-700 mb-1">{f.label}</label>
-                  <input value={(supForm as any)[f.key]} onChange={e => setSupForm(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.ph} className="w-full box-border border border-slate-200 rounded-lg py-[9px] px-3 text-[13px] outline-none text-slate-700" />
-                </div>
-              ))}
-              <div className="grid grid-cols-2 gap-2.5 mb-3.5">
-                {['gst', 'pan'].map(k => <div key={k}><label className="block text-[13px] font-semibold text-slate-700 mb-1">{k.toUpperCase()} Number</label><input value={(supForm as any)[k]} onChange={e => setSupForm(p => ({ ...p, [k]: e.target.value }))} className="w-full box-border border border-slate-200 rounded-lg py-[9px] px-3 text-[13px] outline-none text-slate-700" /></div>)}
+              
+              {/* Basic Fields - Supplier Name */}
+              <div className="mb-3">
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">Supplier Name <span className="text-red-500">*</span></label>
+                <input value={supForm.name} onChange={e => setSupForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., XYZ Corporation" className="w-full box-border border border-slate-200 rounded-lg py-[9px] px-3 text-[13px] outline-none text-slate-700 focus:ring-2 focus:ring-sky-200" />
               </div>
+              
+              {/* Email with validation */}
+              <div className="mb-3">
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">Email <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <input value={supForm.email} onChange={e => setSupForm(p => ({ ...p, email: e.target.value }))} placeholder="contact@company.com" className={fieldClass(isValidEmail(supForm.email), supForm.email)} />
+                  {supForm.email && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {isValidEmail(supForm.email) ? <Check size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-red-400" />}
+                    </span>
+                  )}
+                </div>
+                {supForm.email && !isValidEmail(supForm.email) && <p className="text-xs text-red-500 mt-1">Invalid email format</p>}
+              </div>
+              
+              {/* Contact Person */}
+              <div className="mb-3">
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">Contact Person</label>
+                <input value={supForm.contact} onChange={e => setSupForm(p => ({ ...p, contact: e.target.value }))} placeholder="Full name" className="w-full box-border border border-slate-200 rounded-lg py-[9px] px-3 text-[13px] outline-none text-slate-700 focus:ring-2 focus:ring-sky-200" />
+              </div>
+              
+              {/* Phone with validation */}
+              <div className="mb-3">
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">Phone (10-digit Indian mobile)</label>
+                <div className="relative">
+                  <input value={supForm.phone} onChange={e => setSupForm(p => ({ ...p, phone: e.target.value }))} placeholder="9876543210" className={fieldClass(isValidMobile(supForm.phone), supForm.phone)} />
+                  {supForm.phone && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {isValidMobile(supForm.phone) ? <Check size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-red-400" />}
+                    </span>
+                  )}
+                </div>
+                {supForm.phone && !isValidMobile(supForm.phone) && <p className="text-xs text-red-500 mt-1">Must be 10 digits starting with 6-9</p>}
+              </div>
+              
+              {/* Website */}
+              <div className="mb-3">
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">Website</label>
+                <input value={supForm.website} onChange={e => setSupForm(p => ({ ...p, website: e.target.value }))} placeholder="https://example.com" className="w-full box-border border border-slate-200 rounded-lg py-[9px] px-3 text-[13px] outline-none text-slate-700 focus:ring-2 focus:ring-sky-200" />
+              </div>
+              
+              {/* GST and PAN with validation */}
+              <div className="grid grid-cols-2 gap-4 mb-3.5">
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1">GST Number</label>
+                  <div className="relative">
+                    <input value={supForm.gst} onChange={e => setSupForm(p => ({ ...p, gst: e.target.value.toUpperCase() }))} placeholder="22AAAAA0000A1Z5" className={fieldClass(isValidGST(supForm.gst), supForm.gst)} />
+                    {supForm.gst && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {isValidGST(supForm.gst) ? <Check size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-red-400" />}
+                      </span>
+                    )}
+                  </div>
+                  {supForm.gst && !isValidGST(supForm.gst) && <p className="text-xs text-red-500 mt-1">Invalid GST format</p>}
+                </div>
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-700 mb-1">PAN Number</label>
+                  <div className="relative">
+                    <input value={supForm.pan} onChange={e => setSupForm(p => ({ ...p, pan: e.target.value.toUpperCase() }))} placeholder="ABCDE1234F" className={fieldClass(isValidPAN(supForm.pan), supForm.pan)} />
+                    {supForm.pan && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {isValidPAN(supForm.pan) ? <Check size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-red-400" />}
+                      </span>
+                    )}
+                  </div>
+                  {supForm.pan && !isValidPAN(supForm.pan) && <p className="text-xs text-red-500 mt-1">Invalid PAN format</p>}
+                </div>
+              </div>
+              
+              {/* Contract Period */}
               <div className="border-t border-slate-100 pt-3.5 mb-3.5">
                 <div className="flex items-center gap-1.5 mb-2.5"><div className="w-[3px] h-[13px] rounded-[2px] bg-sky-500" /><label className="text-[13px] font-bold text-[#0F172A]">Contract Period</label></div>
                 <div className="grid grid-cols-2 gap-2.5">
@@ -929,28 +988,88 @@ export function LibraryPage() {
                   <div><label className="block text-xs font-semibold text-slate-700 mb-1">End Date</label><input type="date" value={supForm.contractEnd} onChange={e => setSupForm(p => ({ ...p, contractEnd: e.target.value }))} min={supForm.contractStart || undefined} className="w-full box-border border border-slate-200 rounded-lg py-[9px] px-3 text-[13px] outline-none bg-white cursor-pointer" style={{ color: supForm.contractEnd ? '#334155' : '#94A3B8' }} /></div>
                 </div>
               </div>
+              
+              {/* Stakeholder Matrix - Dynamic Contacts */}
               <div className="border-t border-slate-100 pt-3.5 mb-3.5">
-                <div className="flex items-center gap-1.5 mb-2.5"><div className="w-[3px] h-[13px] rounded-[2px] bg-violet-500" /><label className="text-[13px] font-bold text-[#0F172A]">Stakeholder Matrix</label></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-[11px] font-bold text-sky-500 uppercase tracking-[0.06em] mb-2">Internal</div>
-                    {[{ key: 'businessOwner', label: 'Business Owner' }, { key: 'financeContact', label: 'Finance Contact' }, { key: 'projectManager', label: 'Project Manager' }, { key: 'escalationContact', label: 'Escalation Contact' }].map(f => <div key={f.key} className="mb-2"><label className="block text-[11px] font-semibold text-slate-500 mb-[3px]">{f.label}</label><input value={(supForm as any)[f.key]} onChange={e => setSupForm(p => ({ ...p, [f.key]: e.target.value }))} placeholder="email@abc.co" className="w-full box-border border border-slate-200 rounded-[7px] py-[7px] px-2.5 text-xs outline-none text-slate-700 bg-blue-50" /></div>)}
+                <div className="flex items-center gap-1.5 mb-3"><div className="w-[3px] h-[13px] rounded-[2px] bg-violet-500" /><label className="text-[13px] font-bold text-[#0F172A]">Stakeholder Matrix <span className="text-red-500">*</span></label></div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Internal Contacts */}
+                  <div className="pr-3 border-r border-slate-100">
+                    <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-3">Internal</p>
+                    <div className="flex flex-col gap-3">
+                      {libInternalContacts.map(contact => (
+                        <div key={contact.id}>
+                          {contact.isDefault ? (
+                            <span className="text-xs font-semibold text-sky-600 bg-blue-50 px-2 py-0.5 rounded mb-1.5 inline-block">{contact.label}</span>
+                          ) : (
+                            <input type="text" value={contact.label} onChange={e => updateLibContact('internal', contact.id, 'label', e.target.value)} placeholder="Role label (e.g. Finance, Legal)" className="text-xs font-semibold text-slate-600 mb-1 border-none bg-transparent outline-none w-full" />
+                          )}
+                          <div className="flex gap-1.5 items-center">
+                            <div className="relative flex-1">
+                              <input type="email" value={contact.email} onChange={e => updateLibContact('internal', contact.id, 'email', e.target.value)} placeholder="email@company.com" className={`w-full border rounded-lg text-xs py-2 px-2.5 outline-none focus:ring-1 pr-8 ${contact.email && !isValidEmail(contact.email) ? 'border-red-300 focus:ring-red-200' : contact.email && isValidEmail(contact.email) ? 'border-emerald-300 focus:ring-emerald-200' : 'border-slate-200 focus:ring-sky-400'}`} />
+                              {contact.email && (
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                                  {isValidEmail(contact.email) ? <Check size={14} className="text-emerald-500" /> : <AlertCircle size={14} className="text-red-400" />}
+                                </span>
+                              )}
+                            </div>
+                            {!contact.isDefault && (
+                              <button type="button" onClick={() => removeLibContact('internal', contact.id)} className="text-slate-300 hover:text-red-400 text-lg font-bold bg-transparent border-none cursor-pointer px-1">×</button>
+                            )}
+                          </div>
+                          {contact.isDefault && contact.email && !isValidEmail(contact.email) && <p className="text-[10px] text-red-500 mt-0.5">Invalid email</p>}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => addLibContact('internal')} className="flex items-center gap-1 text-xs text-sky-500 border border-dashed border-sky-200 rounded-lg px-2.5 py-1.5 w-full justify-center hover:bg-blue-50 cursor-pointer bg-transparent mt-1">+ Add Contact</button>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[11px] font-bold text-violet-500 uppercase tracking-[0.06em] mb-2">Supplier</div>
-                    {[{ key: 'accountManager', label: 'Account Manager' }, { key: 'supplierFinance', label: 'Supplier Finance' }, { key: 'supplierEscalation', label: 'Supplier Escalation' }].map(f => <div key={f.key} className="mb-2"><label className="block text-[11px] font-semibold text-slate-500 mb-[3px]">{f.label}</label><input value={(supForm as any)[f.key]} onChange={e => setSupForm(p => ({ ...p, [f.key]: e.target.value }))} placeholder="email@supplier.com" className="w-full box-border border border-slate-200 rounded-[7px] py-[7px] px-2.5 text-xs outline-none text-slate-700 bg-violet-50" /></div>)}
+                  
+                  {/* Supplier Contacts */}
+                  <div className="pl-3">
+                    <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-3">Supplier</p>
+                    <div className="flex flex-col gap-3">
+                      {libSupplierContacts.map(contact => (
+                        <div key={contact.id}>
+                          {contact.isDefault ? (
+                            <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded mb-1.5 inline-block">{contact.label}</span>
+                          ) : (
+                            <input type="text" value={contact.label} onChange={e => updateLibContact('supplier', contact.id, 'label', e.target.value)} placeholder="Role label (e.g. Finance, Legal)" className="text-xs font-semibold text-slate-600 mb-1 border-none bg-transparent outline-none w-full" />
+                          )}
+                          <div className="flex gap-1.5 items-center">
+                            <div className="relative flex-1">
+                              <input type="email" value={contact.email} onChange={e => updateLibContact('supplier', contact.id, 'email', e.target.value)} placeholder="email@supplier.com" className={`w-full border rounded-lg text-xs py-2 px-2.5 outline-none focus:ring-1 pr-8 ${contact.email && !isValidEmail(contact.email) ? 'border-red-300 focus:ring-red-200' : contact.email && isValidEmail(contact.email) ? 'border-emerald-300 focus:ring-emerald-200' : 'border-slate-200 focus:ring-sky-400'}`} />
+                              {contact.email && (
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                                  {isValidEmail(contact.email) ? <Check size={14} className="text-emerald-500" /> : <AlertCircle size={14} className="text-red-400" />}
+                                </span>
+                              )}
+                            </div>
+                            {!contact.isDefault && (
+                              <button type="button" onClick={() => removeLibContact('supplier', contact.id)} className="text-slate-300 hover:text-red-400 text-lg font-bold bg-transparent border-none cursor-pointer px-1">×</button>
+                            )}
+                          </div>
+                          {contact.isDefault && contact.email && !isValidEmail(contact.email) && <p className="text-[10px] text-red-500 mt-0.5">Invalid email</p>}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => addLibContact('supplier')} className="flex items-center gap-1 text-xs text-amber-500 border border-dashed border-amber-200 rounded-lg px-2.5 py-1.5 w-full justify-center hover:bg-amber-50 cursor-pointer bg-transparent mt-1">+ Add Contact</button>
+                    </div>
                   </div>
                 </div>
               </div>
+              
+              {/* PII Configuration Notice */}
               <div className="bg-amber-50 border border-amber-200 rounded-[10px] px-3.5 py-3 mb-1">
                 <div className="flex gap-2 items-start"><AlertTriangle size={15} color="#F59E0B" className="shrink-0 mt-px" /><div><div className="text-[13px] font-bold text-amber-800 mb-0.5">PII Configuration — Locked</div><div className="text-xs text-amber-800 leading-normal">Data sharing configuration is disabled until the initial risk assessment and AI scan are complete.</div></div></div>
               </div>
-              <div className="flex justify-end gap-2.5">
-                <button onClick={() => setModal(null)} className="px-4 py-[9px] text-[13px] border border-slate-200 rounded-lg bg-white text-slate-500 cursor-pointer">Cancel</button>
-                <button onClick={addSupplier} disabled={!supForm.name || !supForm.email || !supForm.stage} className={`px-[18px] py-[9px] text-[13px] font-semibold border-none rounded-lg text-white ${supForm.name && supForm.email && supForm.stage ? 'bg-sky-500 cursor-pointer' : 'bg-slate-300 cursor-not-allowed'}`}>Add Supplier →</button>
+              
+              {/* Actions */}
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button onClick={() => { setModal(null); resetLibContacts(); }} className="px-4 py-[9px] text-[13px] border border-slate-200 rounded-lg bg-white text-slate-500 cursor-pointer hover:bg-slate-50">Cancel</button>
+                <button onClick={addSupplier} disabled={!isFormValid} className={`px-[18px] py-[9px] text-[13px] font-semibold border-none rounded-lg text-white ${isFormValid ? 'bg-sky-500 cursor-pointer hover:bg-sky-600' : 'bg-slate-300 cursor-not-allowed'}`}>Add Supplier →</button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ── ADD SYSTEM ────────────────────────── */}
           {modal.type === 'addSys' && (() => {
@@ -1289,6 +1408,16 @@ export function LibraryPage() {
               try {
                 const updates = { lifecycleStage: newStage || undefined };
                 const updatedDiv = await updateDivision(selDiv.id, updates);
+                
+                // Calculate lifecycle column position when stage is assigned
+                if (newStage && LIFECYCLE_COLUMNS[newStage as Stage]) {
+                  const col = LIFECYCLE_COLUMNS[newStage as Stage];
+                  const cx = (col.minFrac + col.maxFrac) / 2 * CANVAS_W;
+                  const stageCount = divisions.filter(d => d.lifecycleStage === newStage && d.id !== selDiv.id).length;
+                  updatedDiv.lx = cx;
+                  updatedDiv.ly = 150 + stageCount * 95;
+                }
+                
                 setDivisions(ds => ds.map(d => d.id === selDiv.id ? updatedDiv : d));
                 toast.success(`Division moved to ${newStage || 'no stage'}`);
               } catch (err) {

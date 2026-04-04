@@ -6,8 +6,9 @@
  *   const data = await api.get<Supplier[]>('/vendors');
  */
 
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore } from '../stores/authStore';
 
+// @ts-ignore
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -84,7 +85,7 @@ export const authApi = {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    return api.get<{ id: string; name: string; email: string; role: string; avatar?: string; status: string }>(
+    return api.get<{ id: string; name: string; email: string; role: string; org_name?: string; industry?: string; avatar?: string; status: string }>(
       '/auth/me',
       { headers }
     );

@@ -1,4 +1,4 @@
-import type { Stage, PiiFlow } from '@/types/shared';
+import type { Stage, PiiFlow } from '../../types/shared';
 
 export type AssessmentStatus = 'complete' | 'overdue' | 'pending';
 
@@ -6,6 +6,10 @@ export interface Supplier {
   id: string;
   name: string;
   email: string;
+  mobile?: string;
+  phone?: string;
+  gstNumber?: string;
+  panNumber?: string;
   stage: Stage;
   stageColor: string;
   score: number;
@@ -20,4 +24,8 @@ export interface Supplier {
   lastActivity: string;
   internalSpoc?: string;
   externalSpoc?: string;
+  stakeholderMatrix?: {
+    internal: { label: string; email: string }[];
+    supplier: { label: string; email: string }[];
+  }
 }

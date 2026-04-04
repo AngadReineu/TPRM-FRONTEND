@@ -131,29 +131,21 @@ def execute_risk_action(id: str, action_id: str, db: Session = Depends(get_db)):
     return event
 
 @router.get("/trends")
-def get_risk_trends(db: Session = Depends(get_db)):
-    vendors = db.query(Vendor).all()
-    if not vendors or len(vendors) < 3:
-        return [
-            {"month": "Aug", "overall": 72, "critical": 15, "high": 28},
-            {"month": "Sep", "overall": 68, "critical": 12, "high": 25},
-            {"month": "Oct", "overall": 75, "critical": 18, "high": 32},
-            {"month": "Nov", "overall": 70, "critical": 14, "high": 30},
-            {"month": "Dec", "overall": 65, "critical": 11, "high": 24},
-            {"month": "Jan", "overall": 63, "critical": 10, "high": 22},
-            {"month": "Feb", "overall": 62, "critical": 9, "high": 20},
-        ]
-        
+def get_risk_trends(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    vendors = db.query(Vendor).filter(Vendor.org_id == current_user.org_id).all()
+    if not vendors or len(vendors) == 0:
+        return []
+
     months = collections.defaultdict(list)
     for v in vendors:
         if v.updated_at:
             month_str = v.updated_at.strftime("%b")
             score = v.score or 50
             months[month_str].append(score)
-            
+
     if not months:
         return []
-    
+
     res = []
     for month, scores in months.items():
         avg = sum(scores) / len(scores)
@@ -168,19 +160,16 @@ def get_risk_trends(db: Session = Depends(get_db)):
     return res
 
 @router.get("/ai-recommendations")
-def get_ai_recommendations(db: Session = Depends(get_db)):
-    events = db.query(RiskEvent).filter(RiskEvent.status == "Open").order_by(RiskEvent.created_at.desc()).limit(5).all()
-    if not events:
-        return {
-            "recommendations": [
-                "Escalate GHI Technologies assessment - 32 days overdue with no response. Consider sending legal notice.",
-                "Initiate ISO 27001 renewal process for Call Center Outsourcing before expiry on Mar 15, 2026.",
-                "Review and update MFA Enforcement control scope - 3 suppliers out of compliance.",
-                "Consider offboarding DEF Limited from Upgradation stage due to consistently elevated risk scores.",
-                "Schedule quarterly access review for all Retention-stage suppliers - last review was 4 months ago."
-            ]
-        }
+def get_ai_recommendations(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    vendors = db.query(Vendor.id).filter(Vendor.org_id == current_user.org_id).all()
+    vendor_ids = [v.id for v in vendors]
+    
+    if not vendor_ids:
+        return {"recommendations": []}
         
+    events = db.query(RiskEvent).filter(RiskEvent.supplier_id.in_(vendor_ids), RiskEvent.status == "Open").order_by(RiskEvent.created_at.desc()).limit(5).all()
+    if not events:
+        return {"recommendations": []}
     recs = []
     for ev in events:
         recs.append(f"{ev.supplier_name} - {ev.description} ({ev.severity}, {ev.status})")

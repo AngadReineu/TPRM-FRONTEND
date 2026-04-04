@@ -51,6 +51,10 @@ export interface DashboardSummary {
   lowCount: number;
   controlsActive: number;
   controlsTotal: number;
+  assessmentsTotal: number;
+  assessmentsOverdue: number;
+  totalRiskAlerts: number;
+  criticalAlerts: number;
   riskTrend: RiskTrendPoint[];
   stageBreakdown: StageDataItem[];
   agentActivity: AgentRow[];

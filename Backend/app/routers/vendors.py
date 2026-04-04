@@ -7,7 +7,8 @@ from ..database import get_db
 from ..models.vendor import Vendor
 from ..models.user import User
 from ..schemas.vendor import VendorCreate, VendorUpdate, VendorResponse
-from ..dependencies import get_current_user, get_client_ip
+from ..dependencies import get_current_user, get_client_ip, get_optional_user
+from typing import Optional
 from ..services.audit import AuditService
 from ..services.risk_scoring import recalculate_vendor_risk
 
@@ -21,20 +22,51 @@ def list_vendors(
     limit: int = Query(100, ge=1, le=500),
     search: Optional[str] = Query(None),
     stage: Optional[str] = Query(None),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
+    from ..models.library import Division
+    
     q = db.query(Vendor)
+    if current_user:
+        q = q.filter(Vendor.org_id == current_user.org_id)
     if search:
         q = q.filter(Vendor.name.ilike(f"%{search}%"))
     if stage:
         q = q.filter(Vendor.stage == stage)
-    return q.order_by(Vendor.name).offset(skip).limit(limit).all()
+    
+    vendors = q.order_by(Vendor.name).offset(skip).limit(limit).all()
+    
+    # Populate division_name from divisions table if division_id exists but division_name is missing
+    for vendor in vendors:
+        if vendor.division_id and not vendor.division_name:
+            division = db.query(Division).filter(Division.id == vendor.division_id).first()
+            if division:
+                vendor.division_name = division.name
+    
+    return vendors
 
 
 @router.get("/{vendor_id}", response_model=VendorResponse)
-def get_vendor(vendor_id: str, db: Session = Depends(get_db)):
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+def get_vendor(
+    vendor_id: str, 
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    from ..models.library import Division
+    
+    if current_user:
+        vendor = db.query(Vendor).filter(Vendor.id == vendor_id, Vendor.org_id == current_user.org_id).first()
+    else:
+        vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    # Populate division_name if division_id exists but division_name is missing
+    if vendor.division_id and not vendor.division_name:
+        division = db.query(Division).filter(Division.id == vendor.division_id).first()
+        if division:
+            vendor.division_name = division.name
+    
     return vendor
 
 
@@ -43,8 +75,13 @@ def create_vendor(
     payload: VendorCreate,
     request: Request,
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    vendor = Vendor(id=str(uuid.uuid4()), **payload.model_dump())
+    vendor = Vendor(
+        id=str(uuid.uuid4()), 
+        org_id=current_user.org_id if current_user else None,
+        **payload.model_dump()
+    )
     recalculate_vendor_risk(vendor)
     db.add(vendor)
     db.commit()
@@ -58,8 +95,12 @@ def update_vendor(
     payload: VendorUpdate,
     request: Request,
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if current_user:
+        vendor = db.query(Vendor).filter(Vendor.id == vendor_id, Vendor.org_id == current_user.org_id).first()
+    else:
+        vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
@@ -77,8 +118,12 @@ def delete_vendor(
     vendor_id: str,
     request: Request,
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if current_user:
+        vendor = db.query(Vendor).filter(Vendor.id == vendor_id, Vendor.org_id == current_user.org_id).first()
+    else:
+        vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
     name = vendor.name

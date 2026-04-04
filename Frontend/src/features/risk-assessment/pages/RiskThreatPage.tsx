@@ -28,7 +28,7 @@ export function RiskThreatPage() {
       ]);
       setRiskData(trendRes);
       console.log('[RISK EVENTS]', eventsRes);
-      setRiskEvents(eventsRes.length > 0 ? eventsRes : getRiskEvents());
+      setRiskEvents(eventsRes);
       setAiRecommendations(aiRes);
     } catch (e) {
       console.error("Error loading risk data", e);

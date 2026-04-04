@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -19,6 +20,24 @@ def decode_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
+def get_optional_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    auth = request.headers.get('Authorization')
+    if not auth or not auth.startswith('Bearer '):
+        return None
+    try:
+        payload = decode_token(auth.split(' ')[1])
+        user_id = payload.get('sub')
+        if user_id:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user and user.is_active:
+                return user
+    except:
+        pass
+    return None
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),

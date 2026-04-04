@@ -18,7 +18,6 @@ from app.models import (
     Template, Organisation, Division, SupplierNode, SystemNode, OrgSettings,
 )
 from app.database import Base
-from app.seed import seed_all
 from app.routers import (
     auth_router, vendors_router, agents_router, controls_router,
     risks_router, dashboard_router, audit_logs_router, documents_router,
@@ -27,14 +26,25 @@ from app.routers import (
 )
 
 
+from sqlalchemy import text
+from app.config import settings
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+    
     try:
-        seed_all(db)
-    finally:
-        db.close()
+        with SessionLocal() as db:
+            db_name = db.execute(text("SELECT current_database();")).scalar()
+            logging.info(f"")
+            logging.info(f"====== DATABASE CONNECTION INFO ======")
+            logging.info(f"1) Loaded .env URL: {settings.database_url}")
+            logging.info(f"2) Actual Active DB: '{db_name}'")
+            logging.info(f"======================================")
+            logging.info(f"")
+    except Exception as e:
+        logging.error(f"Failed to check active database: {e}")
+        
     yield
 
 

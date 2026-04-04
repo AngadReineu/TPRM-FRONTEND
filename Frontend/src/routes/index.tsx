@@ -4,15 +4,18 @@ import { ProtectedRoute } from '../components/common/ProtectedRoute';
 
 import { LoginPage }             from '../features/auth/pages/LoginPage';
 import { RegisterPage }          from '../features/auth/pages/RegisterPage';
+import { ProfilePage }           from '../features/auth/pages/ProfilePage';           // ← added
 import { DashboardPage }         from '../features/dashboard/pages/DashboardPage';
 import { ControlsPage }          from '../features/controls/pages/ControlsPage';
 import { CreateControlPage }     from '../features/controls/pages/CreateControlPage';
 import { ViewControlPage }       from '../features/controls/pages/ViewControlPage';
 import { AgentsPage }            from '../features/agents/pages/AgentsPage';
 import { AgentDetailPage }       from '../features/agents/pages/AgentDetailPage';
+import { AgentLogsPage }         from '../features/agents/pages/AgentLogPage';
 import { LibraryPage }           from '../features/library/pages/LibraryPage';
 import { LibraryHealthcarePage } from '../features/library/pages/LibraryHealthcarePage';
 import { VendorsPage }           from '../features/vendors/pages/VendorsPage';
+import { SystemsPage }           from '../features/vendors/pages/SystemsPage';        // ← added
 import { RiskThreatPage }        from '../features/risk-assessment/pages/RiskThreatPage';
 import { AuditLogsPage }         from '../features/audit-logs/pages/AuditLogsPage';
 import { DocumentsPage }         from '../features/documents/pages/DocumentsPage';
@@ -22,7 +25,6 @@ import { TemplatesPage }         from '../features/templates/pages/TemplatesPage
 
 // Supplier portal — public route, no auth required
 import { SupplierPortalPage }    from '../features/portal/pages/SupplierPortalPage';
-import { AgentLogsPage } from '../features/agents/pages/AgentLogPage';
 
 function NotFound() {
   return (
@@ -47,7 +49,6 @@ export const router = createBrowserRouter([
   { path: '/register', Component: RegisterPage },
 
   // Supplier portal — public, no login needed
-  // Supplier receives a link like: https://yourdomain.com/portal/abc123token
   { path: '/portal/:token/*', Component: SupplierPortalPage },
 
   // Protected app routes
@@ -65,13 +66,16 @@ export const router = createBrowserRouter([
       { path: 'agents/:id/logs',       Component: AgentLogsPage },
       { path: 'libraries',             Component: LibraryPage },
       { path: 'libraries/healthcare',  Component: LibraryHealthcarePage },
-      { path: 'tprm',                  Component: VendorsPage },
+      { path: 'tprm',                  element: <Navigate to="/tprm/suppliers" replace /> }, // ← fixed
+      { path: 'tprm/suppliers',        Component: VendorsPage },                              // ← added
+      { path: 'tprm/systems',          Component: SystemsPage },                              // ← added
       { path: 'risk-threat',           Component: RiskThreatPage },
       { path: 'audit-logs',            Component: AuditLogsPage },
       { path: 'documents',             Component: DocumentsPage },
       { path: 'roles',                 Component: RolesPage },
       { path: 'settings',              Component: SettingsPage },
       { path: 'templates',             Component: TemplatesPage },
+      { path: 'profile',               Component: ProfilePage },                              // ← added
       { path: '*',                     Component: NotFound },
     ],
   },

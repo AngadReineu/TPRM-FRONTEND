@@ -2,6 +2,7 @@ import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Any
 
 from ..database import get_db
@@ -29,13 +30,44 @@ def get_graph(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    org = db.query(Organisation).first()
+    # Check if user has an org, if not return empty graph
+    if not current_user.org_id:
+        return GraphResponse(
+            org=None,
+            divisions=[],
+            suppliers=[],
+            systems=[],
+        )
+    
+    # Try to get org from library Organisation table
+    org = db.query(Organisation).filter(Organisation.id == current_user.org_id).first()
+    
+    # If no library org record exists, create a basic one from user's org
     if not org:
-        raise HTTPException(status_code=404, detail="Organisation not initialised")
+        from ..models.organisation import Organisation as UserOrg
+        user_org = db.query(UserOrg).filter(UserOrg.id == current_user.org_id).first()
+        if user_org:
+            org = Organisation(
+                id=user_org.id,
+                name=user_org.name,
+                canvas_x=400,
+                canvas_y=300,
+            )
+            db.add(org)
+            db.commit()
+            db.refresh(org)
+    
+    if not org:
+        return GraphResponse(
+            org=None,
+            divisions=[],
+            suppliers=[],
+            systems=[],
+        )
 
-    divisions  = db.query(Division).all()
-    suppliers  = db.query(SupplierNode).all()
-    systems    = db.query(SystemNode).all()
+    divisions  = db.query(Division).filter(Division.org_id == current_user.org_id).all()
+    suppliers  = db.query(SupplierNode).filter(SupplierNode.org_id == current_user.org_id).all()
+    systems    = db.query(SystemNode).filter(SystemNode.org_id == current_user.org_id).all()
 
     return GraphResponse(
         org=OrgNode.model_validate(org),
@@ -72,7 +104,7 @@ def create_division(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    div = Division(id=str(uuid.uuid4()), **payload.model_dump())
+    div = Division(id=str(uuid.uuid4()), org_id=current_user.org_id, **payload.model_dump())
     db.add(div)
     db.commit()
     db.refresh(div)
@@ -86,7 +118,10 @@ def update_division(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    div = db.query(Division).filter(Division.id == div_id).first()
+    div = db.query(Division).filter(
+        Division.id == div_id,
+        Division.org_id == current_user.org_id
+    ).first()
     if not div:
         raise HTTPException(status_code=404, detail="Division not found")
     for k, v in payload.items():
@@ -103,7 +138,10 @@ def delete_division(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    div = db.query(Division).filter(Division.id == div_id).first()
+    div = db.query(Division).filter(
+        Division.id == div_id,
+        Division.org_id == current_user.org_id
+    ).first()
     if not div:
         raise HTTPException(status_code=404, detail="Division not found")
 
@@ -126,18 +164,43 @@ def create_supplier_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = SupplierNode(id=str(uuid.uuid4()), **payload.model_dump())
+    email = getattr(payload, "email", "") or ""
+    
+    # Duplicate validation
+    query = db.query(SupplierNode).filter(func.lower(SupplierNode.name) == payload.name.lower())
+    if email:
+        query = db.query(SupplierNode).filter(
+            (func.lower(SupplierNode.name) == payload.name.lower()) | 
+            (func.lower(SupplierNode.email) == email.lower())
+        )
+        
+    existing = query.first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Supplier with this name or email already exists")
+
+    node = SupplierNode(
+        id=str(uuid.uuid4()), 
+        org_id=current_user.org_id,
+        **payload.model_dump()
+    )
     db.add(node)
     db.commit()
     db.refresh(node)
 
     # ── Mirror into vendors table so TPRM page picks it up ──
     try:
+        # Fetch division name to populate vendor
+        division = db.query(Division).filter(Division.id == payload.division_id).first()
+        division_name = division.name if division else None
+        
         mirror_supplier_to_vendor(
             db,
             name=payload.name,
             email=getattr(payload, "email", "") or "",
             stage=getattr(payload, "stage", "Acquisition") or "Acquisition",
+            org_id=current_user.org_id,
+            division_id=payload.division_id,
+            division_name=division_name,
         )
     except Exception as e:
         logger.error(f"Vendor mirror failed: {e}")
@@ -154,7 +217,10 @@ def update_supplier_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = db.query(SupplierNode).filter(SupplierNode.id == node_id).first()
+    node = db.query(SupplierNode).filter(
+        SupplierNode.id == node_id,
+        SupplierNode.org_id == current_user.org_id
+    ).first()
     if not node:
         raise HTTPException(status_code=404, detail="Supplier node not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -170,7 +236,10 @@ def delete_supplier_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = db.query(SupplierNode).filter(SupplierNode.id == node_id).first()
+    node = db.query(SupplierNode).filter(
+        SupplierNode.id == node_id,
+        SupplierNode.org_id == current_user.org_id
+    ).first()
     if not node:
         raise HTTPException(status_code=404, detail="Supplier node not found")
 
@@ -183,13 +252,38 @@ def delete_supplier_node(
 
 # ── System nodes ───────────────────────────────────────────
 
+@router.get("/systems", response_model=List[SystemNodeResponse])
+def list_systems(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.org_id:
+        systems = db.query(SystemNode).filter(SystemNode.org_id == current_user.org_id).all()
+    else:
+        systems = db.query(SystemNode).all()
+    return systems
+
+
 @router.post("/systems", response_model=SystemNodeResponse, status_code=201)
 def create_system_node(
     payload: SystemNodeCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = SystemNode(id=str(uuid.uuid4()), **payload.model_dump())
+    # Duplicate validation: No same system name for the same supplier
+    if payload.linked_supplier_id:
+        existing = db.query(SystemNode).filter(
+            func.lower(SystemNode.name) == payload.name.lower(),
+            SystemNode.linked_supplier_id == payload.linked_supplier_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="A system with this name already exists for this supplier")
+
+    node = SystemNode(
+        id=str(uuid.uuid4()), 
+        org_id=current_user.org_id,
+        **payload.model_dump()
+    )
     db.add(node)
     db.commit()
     db.refresh(node)
@@ -203,7 +297,10 @@ def update_system_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = db.query(SystemNode).filter(SystemNode.id == node_id).first()
+    node = db.query(SystemNode).filter(
+        SystemNode.id == node_id,
+        SystemNode.org_id == current_user.org_id
+    ).first()
     if not node:
         raise HTTPException(status_code=404, detail="System node not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -219,7 +316,10 @@ def delete_system_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    node = db.query(SystemNode).filter(SystemNode.id == node_id).first()
+    node = db.query(SystemNode).filter(
+        SystemNode.id == node_id,
+        SystemNode.org_id == current_user.org_id
+    ).first()
     if not node:
         raise HTTPException(status_code=404, detail="System node not found")
     db.delete(node)

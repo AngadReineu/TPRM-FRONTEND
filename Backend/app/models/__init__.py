@@ -7,11 +7,12 @@ from .audit_log import AuditLog
 from .document import Document
 from .template import Template
 from .library import Organisation, Division, SupplierNode, SystemNode
+from .organisation import Organisation as MultiTenantOrg
 from .settings_model import OrgSettings
 
 __all__ = [
     "User", "Vendor", "Agent", "AgentTask", "AgentLog", "AgentTimeline",
     "Control", "RiskEvent", "AuditLog", "Document",
-    "Template", "Organisation", "Division", "SupplierNode", "SystemNode",
+    "Template", "Organisation", "MultiTenantOrg", "Division", "SupplierNode", "SystemNode",
     "OrgSettings",
 ]

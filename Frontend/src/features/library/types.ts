@@ -1,4 +1,4 @@
-import type { Stage, PiiFlow } from '@/types/shared';
+import type { Stage, PiiFlow } from '../../types/shared';
 
 export type DragType = 'canvas' | 'org' | 'div' | 'sup' | 'sys';
 export type PiiVolume = 'low' | 'moderate' | 'high';
@@ -51,13 +51,9 @@ export interface Supplier {
   frequency?: string;
   lifecycles?: Stage[];
   stakeholders?: {
-    businessOwner?: string;
-    financeContact?: string;
-    projectManager?: string;
-    escalationContact?: string;
-    accountManager?: string;
-    supplierFinance?: string;
-    supplierEscalation?: string;
+    internal?: { label: string; email: string }[];
+    supplier?: { label: string; email: string }[];
+    [key: string]: any;
   };
 }
 
@@ -135,6 +131,8 @@ export interface SupplierCreate {
   contractEnd?: string;
   frequency?: string;
   lifecycles?: Stage[];
+  internalSpoc?: string;
+  externalSpoc?: string;
   stakeholders?: Supplier['stakeholders'];
 }
 
