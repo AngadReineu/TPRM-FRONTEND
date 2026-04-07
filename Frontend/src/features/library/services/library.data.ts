@@ -334,7 +334,7 @@ export async function getSystems(): Promise<SystemNode[]> {
     async () => toCamelCase(await api.get<unknown[]>('/library/systems')),
     INIT_SYSTEMS.map(s => ({ ...s })),
     'systems-list'
-  );
+  ) as any[];
   
   // Normalize coordinates
   return result.map((sys: any) => ({

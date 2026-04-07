@@ -246,7 +246,17 @@ function SLMTasksPanel({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent: 
 
 /* ─── StakeholderMap ────────────────────────────────────── */
 
-function StakeholderMap({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent: (a: Agent) => void }) {
+function StakeholderMap({
+  agent,
+  onUpdateAgent,
+  pendingTaskName,
+  onTaskRerun,
+}: {
+  agent: Agent;
+  onUpdateAgent: (a: Agent) => void;
+  pendingTaskName?: string | null;
+  onTaskRerun?: () => void;
+}) {
   const [editMode, setEditMode] = useState(false);
   const [internalEmails, setInternalEmails] = useState<string[]>(
     (agent as any).internalContacts?.length ? (agent as any).internalContacts : (agent.internalSpoc ? [agent.internalSpoc] : [''])
@@ -276,11 +286,14 @@ function StakeholderMap({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent:
         supplierContacts: supplierEmails.filter(Boolean),
       } as any);
       setEditMode(false);
-      toast.success('Contacts updated — running Payment Monitoring task...');
 
-      // Auto-trigger Task 3 only
-      await runAgentTask(agent.id, 'Payment Conversation Monitoring');
-
+      if (pendingTaskName) {
+        toast.success(`Contacts saved — re-running: ${pendingTaskName}`);
+        await runAgentTask(agent.id, pendingTaskName);
+        onTaskRerun?.();
+      } else {
+        toast.success('Contacts updated successfully.');
+      }
     } catch {
       toast.error('Failed to update contacts');
     } finally {
@@ -289,7 +302,7 @@ function StakeholderMap({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent:
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
+    <div id="stakeholder-map" className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-sky-500 animate-ping opacity-70" />
@@ -305,7 +318,8 @@ function StakeholderMap({ agent, onUpdateAgent }: { agent: Agent; onUpdateAgent:
             <button onClick={() => setEditMode(false)} className="text-[12px] text-slate-500 border border-slate-200 bg-white rounded-lg px-3 py-1.5 cursor-pointer">Cancel</button>
             <button onClick={handleSave} disabled={saving}
               className="flex items-center gap-1.5 text-[12px] font-semibold text-white bg-sky-500 border-none px-3 py-1.5 rounded-lg cursor-pointer hover:bg-sky-600 disabled:opacity-50">
-              {saving ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />} Save
+              {saving ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
+              {pendingTaskName ? `Save & Re-run` : 'Save'}
             </button>
           </div>
         )}
@@ -404,6 +418,7 @@ function AgentDetailView({
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [forceDisconnect, setForceDisconnect] = useState(false);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [pendingBlockedTask, setPendingBlockedTask] = useState<string | null>(null);
 
   useEffect(() => {
     import('../../vendors/services/vendors.data')
@@ -671,7 +686,12 @@ function AgentDetailView({
         </div>
 
         {/* ── STAKEHOLDER MAP ── */}
-        <StakeholderMap agent={agent} onUpdateAgent={onUpdateAgent} />
+        <StakeholderMap
+          agent={agent}
+          onUpdateAgent={onUpdateAgent}
+          pendingTaskName={pendingBlockedTask}
+          onTaskRerun={() => setPendingBlockedTask(null)}
+        />
 
         {/* ── PROCESS INTELLIGENCE ── */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
@@ -789,7 +809,34 @@ function AgentDetailView({
                       <CheckCircle2 size={32} color="#A7F3D0" className="block mx-auto mb-2" />
                       No {taskFilter !== 'All' ? taskFilter.toLowerCase() + ' ' : ''}tasks for this agent
                     </div>
-                  ) : filteredTasks.map((task) => <TaskRow key={task.id} task={task} agentColor={agentColor} />)}
+                  ) : filteredTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      agentId={agent.id}
+                      agentColor={agentColor}
+                      onStatusChange={(taskId, newStatus) => {
+                        setTasks(prev =>
+                          prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t)
+                        );
+                      }}
+                      onAssign={(task, blockedTaskName) => {
+                        if (blockedTaskName) {
+                          setPendingBlockedTask(blockedTaskName);
+                          document.getElementById('stakeholder-map')?.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center',
+                          });
+                          toast.info(
+                            `Add the missing contact in the Stakeholder Map, then click "Save & Re-run" to retry: ${blockedTaskName}`
+                          );
+                        }
+                      }}
+                      onResolve={() => {
+                        setPendingBlockedTask(null);
+                      }}
+                    />
+                  ))}
                 </div>
               </div>
             </div>

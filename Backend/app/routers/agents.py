@@ -290,14 +290,22 @@ def stop_agent(agent_id: str, db: Session = Depends(get_db)):
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    # Attempt to forcefully kill the Windows process running this specific agent
-    kill_cmd = f'wmic process where "name=\'python.exe\' and commandline like \'%ConsultingAgent.py%{agent_id}%\'" call terminate'
-    subprocess.run(kill_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Write a stop signal file — the agent polls for this and exits cleanly
+    stop_dir = settings.stop_signal_dir
+    os.makedirs(stop_dir, exist_ok=True)
+    stop_file = os.path.join(stop_dir, f"{agent_id}.stop")
 
+    try:
+        with open(stop_file, "w") as f:
+            f.write(datetime.now().isoformat())
+    except Exception as e:
+        logger.error(f"Failed to write stop signal for agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to write stop signal")
+
+    # Update agent status immediately
     agent.status = "idle"
     agent.current_task = "Stopped by user"
-    
-    # Add a stop log
+
     log = AgentLog(
         id=str(uuid.uuid4()),
         agent_id=agent_id,
@@ -305,7 +313,7 @@ def stop_agent(agent_id: str, db: Session = Depends(get_db)):
         view="detail",
         time=datetime.now().strftime("%H:%M:%S"),
         type="error",
-        message="Agent run forcibly stopped by user",
+        message="Agent run stopped by user",
     )
     db.add(log)
     db.commit()

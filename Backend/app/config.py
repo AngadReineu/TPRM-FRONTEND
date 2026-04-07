@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 25
     agent_script_path: str = r"C:\Users\Angad\OneDrive\Desktop\Agent\GmailAgent\ConsultingAgent.py"
     mistral_url: str = "http://localhost:11434/api/chat"
+    stop_signal_dir: str = "app/stop_signals"
 
     class Config:
         env_file = ".env"

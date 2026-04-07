@@ -1,23 +1,67 @@
 import { useState } from 'react';
-import { MessageSquare, UserCheck, CalendarCheck, Send } from 'lucide-react';
+import { MessageSquare, UserCheck, CalendarCheck, Send, RefreshCw } from 'lucide-react';
+import { api } from '../../../lib/api';
 import type { AgentTask, TaskStatus } from '../types';
 
-export function TaskRow({ task, agentColor }: { task: AgentTask; agentColor: string }) {
+export function TaskRow({
+  task,
+  agentId,
+  agentColor,
+  onStatusChange,
+  onAssign,
+  onResolve,
+}: {
+  task: AgentTask;
+  agentId: string;
+  agentColor: string;
+  onStatusChange?: (taskId: string, newStatus: TaskStatus) => void;
+  onAssign?: (task: AgentTask, blockedTaskName: string | null) => void;
+  onResolve?: (task: AgentTask) => void;
+}) {
   const [showComment, setShowComment] = useState(false);
   const [comment, setComment] = useState('');
   const [localStatus, setLocalStatus] = useState<TaskStatus>(task.status);
+  const [localPriority, setLocalPriority] = useState(task.priority);
+  const [saving, setSaving] = useState(false);
+
+  // Extracts "SOW Verification" from "Missing Contact — Add Supplier Email to run: SOW Verification"
+  const getBlockedTaskName = (title: string): string | null => {
+    const marker = 'to run: ';
+    const idx = title.toLowerCase().indexOf(marker);
+    if (idx !== -1) return title.slice(idx + marker.length).trim();
+    return null;
+  };
 
   const priorityCfg = {
-    High:   { color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
-    Medium: { color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
-    Low:    { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
-  }[task.priority || 'Medium'] || { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+    High:     { color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
+    Medium:   { color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
+    Low:      { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
+    Critical: { color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+  }[localPriority || 'Medium'] || { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
 
   const statusCfg = {
     Open:          { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' },
     'In Progress': { color: '#0EA5E9', bg: '#EFF6FF', border: '#BAE6FD' },
     Resolved:      { color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
   }[localStatus || 'Open'] || { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+
+  const updateTask = async (fields: Record<string, string>) => {
+    setSaving(true);
+    try {
+      await api.patch(`/agents/${agentId}/tasks/${task.id}`, fields);
+      if (fields.status) {
+        setLocalStatus(fields.status as TaskStatus);
+        onStatusChange?.(task.id, fields.status as TaskStatus);
+      }
+      if (fields.priority) {
+        setLocalPriority(fields.priority as any);
+      }
+    } catch (e) {
+      console.error('Failed to update task', e);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="border border-slate-200 rounded-[10px] bg-white mb-2.5 py-3.5 px-4">
@@ -29,7 +73,7 @@ export function TaskRow({ task, agentColor }: { task: AgentTask; agentColor: str
               className="text-[10px] font-bold rounded-full px-2 py-0.5"
               style={{ color: priorityCfg.color, backgroundColor: priorityCfg.bg, border: `1px solid ${priorityCfg.border}` }}
             >
-              {task.priority}
+              {localPriority}
             </span>
             <span
               className="text-[10px] font-semibold rounded-full px-2 py-0.5"
@@ -56,27 +100,46 @@ export function TaskRow({ task, agentColor }: { task: AgentTask; agentColor: str
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-1.5 shrink-0 flex-wrap">
+        <div className="flex gap-1.5 shrink-0 flex-wrap items-center">
+          {saving && <RefreshCw size={12} className="animate-spin text-slate-400" />}
+
           {localStatus !== 'In Progress' && localStatus !== 'Resolved' && (
             <button
-              onClick={() => setLocalStatus('In Progress')}
-              className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-sky-200 bg-sky-50 text-sky-500 cursor-pointer"
+              onClick={async () => {
+                await updateTask({ status: 'In Progress' });
+                const blockedTask = getBlockedTaskName(task.title);
+                onAssign?.(task, blockedTask);
+              }}
+              disabled={saving}
+              className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-sky-200 bg-sky-50 text-sky-500 cursor-pointer disabled:opacity-50"
             >
               Assign
             </button>
           )}
+
           {localStatus !== 'Resolved' && (
             <button
-              onClick={() => setLocalStatus('Resolved')}
-              className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-emerald-200 bg-emerald-50 text-emerald-500 cursor-pointer"
+              onClick={async () => {
+                await updateTask({ status: 'Resolved' });
+                onResolve?.(task);
+              }}
+              disabled={saving}
+              className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-emerald-200 bg-emerald-50 text-emerald-500 cursor-pointer disabled:opacity-50"
             >
               Resolve
             </button>
           )}
-          <button className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-red-200 bg-red-50 text-red-500 cursor-pointer">
-            Escalate
-          </button>
+
+          {localStatus !== 'Resolved' && (
+            <button
+              onClick={() => updateTask({ status: 'In Progress', priority: 'Critical' })}
+              disabled={saving}
+              className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-red-200 bg-red-50 text-red-500 cursor-pointer disabled:opacity-50"
+            >
+              Escalate
+            </button>
+          )}
+
           <button
             onClick={() => setShowComment((v) => !v)}
             className="text-[11px] font-semibold px-3 py-[5px] rounded-[7px] border border-slate-200 bg-slate-50 text-slate-500 cursor-pointer flex items-center gap-1"
