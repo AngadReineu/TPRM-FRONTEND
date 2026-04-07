@@ -150,8 +150,6 @@ function Step1({ form, setForm }: { form: any; setForm: any }) {
         <div className="grid grid-cols-3 gap-3">
           {[
             { id: 'local', title: 'Local Control', desc: 'Create and manage locally', accent: '#0EA5E9' },
-            { id: 'kyudo', title: 'Imported from Kyudo', desc: 'Import from Kyudo governance framework', accent: '#8B5CF6' },
-            { id: 'grc', title: 'Import from GRC', desc: 'Pull from ServiceNow GRC, Archer, or OneTrust', accent: '#10B981' },
           ].map(opt => {
             const sel = form.source === opt.id;
             return (
@@ -165,18 +163,6 @@ function Step1({ form, setForm }: { form: any; setForm: any }) {
             );
           })}
         </div>
-        {form.source === 'grc' && (
-          <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-[10px] p-4">
-            <div className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-1.5">
-              <GitMerge size={13} className="text-emerald-500" /> GRC Provider
-            </div>
-            <select className={INPUT_CLS} value={form.grcProvider ?? ''}
-              onChange={e => setForm({ ...form, grcProvider: e.target.value })}>
-              <option value="">Select GRC provider...</option>
-              {GRC_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Monitoring Persona — 2 groups */}
